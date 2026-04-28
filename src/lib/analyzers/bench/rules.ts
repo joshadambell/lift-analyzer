@@ -125,29 +125,48 @@ export function checkButtLift(
   torsoLen: number
 ): RuleResult {
   const cfg = BENCH_RULE_CONFIGS.buttLift;
-  const repFrames = frames.slice(bounds.startFrame, bounds.endFrame + 1);
-  if (repFrames.length < 4 || torsoLen === 0) return unknown(cfg.id, cfg.name, cfg.cues.passed);
+  if (torsoLen === 0) return unknown(cfg.id, cfg.name, cfg.cues.passed);
 
-  const hipY = repFrames.map((f) => {
+  // Helper: extract hip-Y midpoint with visibility gate
+  const hipYAt = (f: PoseFrame): number | null => {
     const lh = getKp(f, "left_hip");
     const rh = getKp(f, "right_hip");
-    if (lh && rh) return midpoint(lh, rh).y;
-    if (lh) return lh.y;
-    if (rh) return rh.y;
+    if (lh && rh && lh.visibility > 0.4 && rh.visibility > 0.4) return midpoint(lh, rh).y;
+    if (lh && lh.visibility > 0.4) return lh.y;
+    if (rh && rh.visibility > 0.4) return rh.y;
     return null;
-  }).filter((v): v is number => v !== null);
+  };
 
-  if (hipY.length < 4) return unknown(cfg.id, cfg.name, cfg.cues.passed);
-  const smoothed = smoothMovingAverage(hipY, 3);
-  // For supine lifter, hip moving "up" means hip Y *decreases* — so total range matters
-  const range = Math.max(...smoothed) - Math.min(...smoothed);
-  const fraction = range / torsoLen;
+  // Baseline = median hip-Y over the first few frames (lifter set up, butt
+  // planted, including their natural arch). This is the "no fault" reference.
+  const setupFrames = frames.slice(bounds.startFrame, bounds.startFrame + 5);
+  const baselineSamples = setupFrames.map(hipYAt).filter((v): v is number => v !== null);
+  if (baselineSamples.length === 0) return unknown(cfg.id, cfg.name, cfg.cues.passed);
+  const baseline = median(baselineSamples);
+
+  // Press phase = bottomFrame → endFrame (chest contact through lockout).
+  // Butt lift is a hip RISE during press; in MediaPipe coords, "up" = smaller Y.
+  // We measure the maximum deviation BELOW baseline (i.e., hip rising).
+  const pressFrames = frames.slice(bounds.bottomFrame, bounds.endFrame + 1);
+  const pressHipY = pressFrames.map(hipYAt).filter((v): v is number => v !== null);
+  if (pressHipY.length < 3) return unknown(cfg.id, cfg.name, cfg.cues.passed);
+
+  const smoothed = smoothMovingAverage(pressHipY, 3);
+  const minY = Math.min(...smoothed);            // highest hip position during press
+  const lift = Math.max(0, baseline - minY);     // how far hip rose above baseline
+  const liftFraction = lift / torsoLen;
 
   const verdict: RuleVerdict =
-    fraction <= cfg.maxHipDriftFraction / 2 ? "passed"
-    : fraction <= cfg.maxHipDriftFraction ? "borderline" : "failed";
+    liftFraction <= cfg.maxHipDriftFraction / 2 ? "passed"
+    : liftFraction <= cfg.maxHipDriftFraction ? "borderline" : "failed";
 
-  return finalize(cfg.id, cfg.name, verdict, cfg.cues, fraction * 100, cfg.maxHipDriftFraction * 100, 0.7);
+  return finalize(cfg.id, cfg.name, verdict, cfg.cues, liftFraction * 100, cfg.maxHipDriftFraction * 100, 0.7);
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
 export function checkBarPath(

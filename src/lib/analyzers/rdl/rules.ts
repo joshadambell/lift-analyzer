@@ -10,7 +10,7 @@
 import type { PoseFrame, RuleResult, RuleVerdict } from "../../core/types";
 import type { RepBounds } from "../../core/repSegmenter";
 import {
-  dominantSide, angleDeg, smoothMovingAverage,
+  dominantSide, angleDeg, smoothMovingAverage, facingSign,
 } from "../../core/geometry";
 import { getFault } from "../../knowledge";
 
@@ -122,12 +122,24 @@ export function checkHyperextension(
   const hip = dominantSide(lockout, "left_hip", "right_hip");
   if (!shoulder || !hip) return unknown(cfg.id, cfg.name, cfg.cues.passed);
 
-  const lean = Math.abs(shoulder.x - hip.x) / torsoLen;
-  const verdict: RuleVerdict =
-    lean <= cfg.maxLeanBackFraction / 2 ? "passed"
-    : lean <= cfg.maxLeanBackFraction ? "borderline" : "failed";
+  const facing = facingSign(lockout);
+  if (facing === 0) {
+    return unknown(cfg.id, cfg.name, "Cannot determine facing direction at lockout — feet not clearly visible.");
+  }
 
-  return finalize(cfg.id, cfg.name, verdict, cfg.cues, lean * 100, cfg.maxLeanBackFraction * 100, Math.min(shoulder.visibility, hip.visibility));
+  // backwardLean > 0 = shoulders behind hips relative to facing direction
+  const backwardLean = (hip.x - shoulder.x) * facing / torsoLen;
+
+  let verdict: RuleVerdict;
+  if (backwardLean <= cfg.maxLeanBackFraction / 2) verdict = "passed";
+  else if (backwardLean <= cfg.maxLeanBackFraction) verdict = "borderline";
+  else verdict = "failed";
+
+  return finalize(
+    cfg.id, cfg.name, verdict, cfg.cues,
+    backwardLean * 100, cfg.maxLeanBackFraction * 100,
+    Math.min(shoulder.visibility, hip.visibility)
+  );
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

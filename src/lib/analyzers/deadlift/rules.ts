@@ -16,6 +16,7 @@ import {
   midpoint,
   smoothMovingAverage,
   mean,
+  facingSign,
 } from "../../core/geometry";
 import { getFault } from "../../knowledge";
 
@@ -149,17 +150,27 @@ export function checkHyperextension(
   const hip = dominantSide(lockout, "left_hip", "right_hip");
   if (!shoulder || !hip) return unknown(cfg.id, cfg.name, cfg.cues.passed);
 
-  // Shoulder X behind hip X (in the direction opposite the bar) = leaning back.
-  // Side view: positive X drift of shoulder away from bar = lean. Use absolute
-  // for safety — direction depends on which way lifter faces the camera.
-  const lean = (shoulder.x - hip.x) / torsoLen;
-  const leanMag = Math.abs(lean);
+  // Use facing direction so we measure backward lean specifically (the fault),
+  // not forward lean (a different fault). If facing direction is undetermined
+  // (no visible feet), fall back to "unknown" — better than guessing.
+  const facing = facingSign(lockout);
+  if (facing === 0) {
+    return unknown(cfg.id, cfg.name, "Cannot determine facing direction at lockout — feet not clearly visible.");
+  }
 
-  const verdict: RuleVerdict =
-    leanMag <= cfg.maxLeanBackFraction / 2 ? "passed"
-    : leanMag <= cfg.maxLeanBackFraction ? "borderline" : "failed";
+  // backwardLean > 0 = shoulders behind hips relative to facing dir = the fault
+  const backwardLean = (hip.x - shoulder.x) * facing / torsoLen;
 
-  return finalize(cfg.id, cfg.name, verdict, cfg.cues, leanMag * 100, cfg.maxLeanBackFraction * 100, Math.min(shoulder.visibility, hip.visibility));
+  let verdict: RuleVerdict;
+  if (backwardLean <= cfg.maxLeanBackFraction / 2) verdict = "passed";
+  else if (backwardLean <= cfg.maxLeanBackFraction) verdict = "borderline";
+  else verdict = "failed";
+
+  return finalize(
+    cfg.id, cfg.name, verdict, cfg.cues,
+    backwardLean * 100, cfg.maxLeanBackFraction * 100,
+    Math.min(shoulder.visibility, hip.visibility)
+  );
 }
 
 export function checkHitching(

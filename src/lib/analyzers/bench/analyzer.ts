@@ -2,7 +2,7 @@ import type {
   LiftAnalyzer, PoseFrame, RepMetrics, FormAnalysis, VideoValidation, RuleResult,
 } from "../../core/types";
 import { segmentReps, wristYSignal, type RepBounds } from "../../core/repSegmenter";
-import { torsoLength } from "../../core/geometry";
+import { torsoLength, getKp, midpoint } from "../../core/geometry";
 import { estimateBottomDwell, buildTopFixes, findMainIssue } from "../../core/analysisCommon";
 import {
   checkPause, checkLockout, checkButtLift, checkBarPath, computeBarPathDriftPercent,
@@ -31,9 +31,17 @@ export class BenchPressAnalyzer implements LiftAnalyzer {
     if (frames.length < MIN_FRAMES) return failed(frames, `Video too short — only ${frames.length} frames. Need ${MIN_FRAMES}+.`);
     if (!frames.some((f) => f.confidence > 0.3)) return failed(frames, "No person detected in the video.");
 
-    // Side-view check from estimateSideViewConfidence assumes a vertical lifter
-    // — irrelevant for supine bench. We skip the angle warning for bench and
-    // expect the user to film from the side (this is the standard angle).
+    // Bench-specific orientation check: the lifter is supine, so shoulder Y
+    // and hip Y should be close (horizontal torso). For a standing lift, the
+    // gap is roughly equal to torso length. We require average |Δy| / torsoLen
+    // to be below 0.4 across the early frames to accept the video as a bench.
+    if (!isSupine(frames)) {
+      return failed(
+        frames,
+        "Lifter doesn't appear to be lying on a bench. If this is a bench press, ensure the camera is filming from the side at bench height. Otherwise, switch to the correct lift type."
+      );
+    }
+
     return {
       valid: true,
       sideViewConfidence: 1,
@@ -102,6 +110,38 @@ export class BenchPressAnalyzer implements LiftAnalyzer {
       videoValidation: validation,
     };
   }
+}
+
+/**
+ * Detect supine torso orientation. In a side-view bench press, the shoulder
+ * and hip midpoints sit at nearly the same Y. In a standing lift they're
+ * separated by roughly torsoLength.
+ *
+ * We compute the ratio of vertical separation to total shoulder→hip distance.
+ * For a horizontal torso the ratio is small (~0.0–0.3), for a vertical one
+ * it's near 1.0. Threshold: 0.5 (anything under is "horizontal enough").
+ */
+function isSupine(frames: PoseFrame[]): boolean {
+  const sample = frames.slice(0, Math.min(30, frames.length));
+  const ratios: number[] = [];
+  for (const f of sample) {
+    const ls = getKp(f, "left_shoulder");
+    const rs = getKp(f, "right_shoulder");
+    const lh = getKp(f, "left_hip");
+    const rh = getKp(f, "right_hip");
+    if (!ls || !rs || !lh || !rh) continue;
+    if (Math.min(ls.visibility, rs.visibility, lh.visibility, rh.visibility) < 0.4) continue;
+
+    const sm = midpoint(ls, rs);
+    const hm = midpoint(lh, rh);
+    const dy = Math.abs(sm.y - hm.y);
+    const total = Math.hypot(sm.x - hm.x, sm.y - hm.y);
+    if (total < 0.05) continue; // body too small or keypoints collapsed
+    ratios.push(dy / total);
+  }
+  if (ratios.length === 0) return false;
+  const avgRatio = ratios.reduce((s, v) => s + v, 0) / ratios.length;
+  return avgRatio < 0.5;
 }
 
 function failed(frames: PoseFrame[], reason: string): VideoValidation {

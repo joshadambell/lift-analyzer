@@ -65,6 +65,34 @@ export function dominantSide(
 }
 
 /**
+ * Lifter facing direction inferred from foot anatomy in a side view.
+ *
+ * In a side view, the toe (foot_index) sits forward of the heel along the
+ * camera's X axis. The sign of (foot_index.x - heel.x) tells us which way
+ * the lifter is facing relative to the camera.
+ *
+ * Returns +1 (facing camera-right) or -1 (facing camera-left), or 0 if
+ * the foot keypoints aren't visible enough to be trusted.
+ */
+export function facingSign(frame: PoseFrame): -1 | 0 | 1 {
+  const lt = getKp(frame, "left_foot_index");
+  const rt = getKp(frame, "right_foot_index");
+  const lh = getKp(frame, "left_heel");
+  const rh = getKp(frame, "right_heel");
+
+  // Prefer the more visible side
+  const useLeft = (lt?.visibility ?? 0) + (lh?.visibility ?? 0) >=
+                  (rt?.visibility ?? 0) + (rh?.visibility ?? 0);
+  const toe = useLeft ? lt : rt;
+  const heel = useLeft ? lh : rh;
+  if (!toe || !heel || toe.visibility < 0.4 || heel.visibility < 0.4) return 0;
+
+  const dx = toe.x - heel.x;
+  if (Math.abs(dx) < 0.01) return 0; // ambiguous (close to vertical foot)
+  return dx > 0 ? 1 : -1;
+}
+
+/**
  * Estimate whether the camera is in side view.
  *
  * Heuristic: in side view, the left and right versions of a keypoint are
