@@ -13,12 +13,11 @@ export function AnalysisReport({ analysis }: Props) {
   if (!videoValidation.valid) {
     return (
       <div className="bg-red-950/30 border border-red-800 rounded-xl p-6">
-        <div className="text-red-400 font-semibold mb-2">Analysis rejected</div>
+        <div className="text-red-400 font-semibold mb-2">Analysis failed</div>
         <div className="text-zinc-300 text-sm">{overallVerdict}</div>
         <div className="mt-4 text-xs text-zinc-500 font-mono">
           Frames analyzed: {videoValidation.frameCount} ·
-          Duration: {(videoValidation.durationMs / 1000).toFixed(1)}s ·
-          Side-view confidence: {(videoValidation.sideViewConfidence * 100).toFixed(0)}%
+          Duration: {(videoValidation.durationMs / 1000).toFixed(1)}s
         </div>
       </div>
     );
@@ -26,6 +25,13 @@ export function AnalysisReport({ analysis }: Props) {
 
   return (
     <div className="space-y-8">
+      {/* Angle warning (non-blocking) */}
+      {videoValidation.rejectionReason && (
+        <div className="bg-yellow-950/30 border border-yellow-800/50 rounded-xl px-4 py-3 text-xs text-yellow-400">
+          ⚠ {videoValidation.rejectionReason}
+        </div>
+      )}
+
       {/* Verdict */}
       <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6">
         <div className="text-xs text-zinc-500 uppercase tracking-wider font-medium mb-2">Overall verdict</div>

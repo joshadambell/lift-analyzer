@@ -5,9 +5,10 @@ import { useRef, useState, useCallback } from "react";
 interface Props {
   onVideoSelected: (file: File) => void;
   disabled?: boolean;
+  liftName?: string;
 }
 
-export function VideoUpload({ onVideoSelected, disabled }: Props) {
+export function VideoUpload({ onVideoSelected, disabled, liftName = "lift" }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -52,7 +53,7 @@ export function VideoUpload({ onVideoSelected, disabled }: Props) {
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
       />
       <div className="text-5xl mb-4">🎬</div>
-      <p className="text-lg font-medium text-zinc-200">Drop a squat video here</p>
+      <p className="text-lg font-medium text-zinc-200">Drop a {liftName.toLowerCase()} video here</p>
       <p className="text-sm text-zinc-500 mt-2">
         Side-view · MP4 / MOV · One or multiple reps
       </p>

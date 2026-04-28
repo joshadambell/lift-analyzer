@@ -45,7 +45,7 @@ export async function runAnalysis(
       liftType,
       repCount: 0,
       reps: [],
-      overallVerdict: "No reps detected. Ensure the video shows a complete squat from unrack to rerack.",
+      overallVerdict: "No reps detected. Ensure the video shows complete reps with the lifter clearly in frame.",
       topFixes: [],
       videoValidation: { ...validation, rejectionReason: "No reps detected" },
     };

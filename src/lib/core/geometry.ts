@@ -64,19 +64,39 @@ export function dominantSide(
   return l.visibility >= r.visibility ? l : r;
 }
 
-/** Detect camera view: side-view has high visibility asymmetry between left/right keypoints */
+/**
+ * Estimate whether the camera is in side view.
+ *
+ * Heuristic: in side view, the left and right versions of a keypoint are
+ * stacked front-to-back, so their X coordinates are nearly identical.
+ * In front view, left_shoulder.x and right_shoulder.x are far apart (~0.3).
+ *
+ * Side-view confidence = 1 when X-separation < SIDE_THRESHOLD,
+ * 0 when separation > FRONT_THRESHOLD.
+ *
+ * Note: MediaPipe predicts occluded keypoints with high visibility,
+ * so visibility asymmetry is NOT a reliable side-view signal.
+ */
 export function estimateSideViewConfidence(frames: PoseFrame[]): number {
+  const SIDE_THRESHOLD = 0.12;   // X-sep below this = definitely side view
+  const FRONT_THRESHOLD = 0.25;  // X-sep above this = definitely front view
+
   const sample = frames.slice(0, Math.min(30, frames.length));
-  const asymmetries = sample.map((f) => {
+  const scores = sample.map((f) => {
     const ls = getKp(f, "left_shoulder");
     const rs = getKp(f, "right_shoulder");
     const lh = getKp(f, "left_hip");
     const rh = getKp(f, "right_hip");
     if (!ls || !rs || !lh || !rh) return 0;
-    // Side view: one shoulder is more visible than the other
-    const shoulderAsym = Math.abs(ls.visibility - rs.visibility);
-    const hipAsym = Math.abs(lh.visibility - rh.visibility);
-    return (shoulderAsym + hipAsym) / 2;
+
+    const shoulderXSep = Math.abs(ls.x - rs.x);
+    const hipXSep = Math.abs(lh.x - rh.x);
+    const sep = (shoulderXSep + hipXSep) / 2;
+
+    // Map sep → confidence: small sep = high confidence (side view)
+    if (sep <= SIDE_THRESHOLD) return 1;
+    if (sep >= FRONT_THRESHOLD) return 0;
+    return 1 - (sep - SIDE_THRESHOLD) / (FRONT_THRESHOLD - SIDE_THRESHOLD);
   });
-  return mean(asymmetries);
+  return mean(scores);
 }

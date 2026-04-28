@@ -1,12 +1,9 @@
 /**
- * Squat form rules based on StrongLifts methodology.
- * Reference: https://stronglifts.com/squat/
+ * Squat form rules — geometric detectors with KB-sourced cue language.
  *
- * Each rule has two layers:
- *   1. A config object (thresholds, keypoint names, cue text) — tunable without code
- *   2. A check function — only used when the geometry is too complex for a config
- *
- * Rule IDs are stable identifiers used in reports and tests.
+ * Numeric thresholds live here as tuning parameters. Coaching language
+ * (passed/borderline/failed cues) is drawn from src/lib/knowledge/lifts.json
+ * via the `kbCues` map below — to update wording, edit the KB, not the code.
  */
 
 import type { PoseFrame, RuleResult, RuleVerdict } from "../../core/types";
@@ -15,104 +12,128 @@ import {
   getKp,
   dominantSide,
   midpoint,
-  distance,
   angleDeg,
-  torsoLength,
   smoothMovingAverage,
   mean,
 } from "../../core/geometry";
+import { getFault } from "../../knowledge";
 
-// ─── Rule configs (data-driven thresholds) ────────────────────────────────────
+// ─── KB-sourced cue builders ──────────────────────────────────────────────────
+
+interface CueSet {
+  passed: string;
+  borderline: string;
+  failed: string;
+  unknown?: string;
+}
+
+/** Build a cue triple from a KB fault entry. */
+function cuesFromFault(faultId: string, passedCue: string, borderlineSuffix?: string): CueSet {
+  const f = getFault("squat", faultId);
+  if (!f) {
+    return {
+      passed: passedCue,
+      borderline: passedCue,
+      failed: "Form fault detected.",
+    };
+  }
+  const corrections = f.correction.map((c) => c.replace(/_/g, " ")).join("; ");
+  return {
+    passed: passedCue,
+    borderline: borderlineSuffix
+      ? `${borderlineSuffix} ${corrections.split(";")[0]}.`
+      : `Borderline ${f.fault.toLowerCase()}.`,
+    failed: `${f.description}. Fix: ${corrections}.`,
+  };
+}
+
+// ─── Rule configs (numeric thresholds + cue references) ───────────────────────
 
 export const SQUAT_RULE_CONFIGS = {
   depth: {
     id: "depth",
     name: "Depth",
-    // Hip crease must be BELOW knee top → hip Y > knee Y in normalized coords
-    // Tolerance as fraction of torso length
     toleranceFraction: 0.02,
-    passedCue: "Broke parallel — good depth.",
-    borderlineCue: "Just at parallel — aim to descend another inch.",
-    // StrongLifts: https://stronglifts.com/squat/#Squat_Depth
-    failedCue:
-      "Didn't break parallel — hips stayed above knees. Widen stance to shoulder-width with toes 30° out and push knees out as you descend.",
+    cues: cuesFromFault(
+      "sq_fault_4",
+      "Hip crease at or below patella — depth standard met.",
+      "Just at parallel — descend an inch deeper to bank it."
+    ),
   },
   kneeTravel: {
     id: "kneeTravel",
-    name: "Knee travel (no forward drift past mid-descent)",
-    // If knee-X keeps increasing after 50% of depth is reached, flag it
-    // StrongLifts: https://stronglifts.com/squat/#Knees
-    driftFractionThreshold: 0.02, // knee X drift after mid-descent > 2% of torso = fail
-    passedCue: "Knees stopped tracking forward at mid-descent — good.",
-    borderlineCue: "Slight continued knee travel past mid-descent.",
-    failedCue:
-      "Knees kept drifting forward through the whole descent. Sit hips back earlier so knees stop moving once thighs are parallel.",
+    name: "Knee tracking",
+    driftFractionThreshold: 0.02,
+    cues: cuesFromFault(
+      "sq_fault_1",
+      "Knees tracked over toes throughout.",
+      "Slight inward knee travel."
+    ),
   },
   hipShoot: {
     id: "hipShoot",
     name: "Hip/chest rise ratio",
-    // During ascent, hips should not outpace shoulders by more than 15%
-    // StrongLifts: https://stronglifts.com/squat/#Back_Angle
     maxRatioDivergence: 0.15,
-    passedCue: "Hips and chest rose together.",
-    borderlineCue: "Slight hip lead on the way up — watch the bar path.",
-    failedCue:
-      "Hips shot up faster than your chest — the bar drifted forward. Drive chest and hips up together.",
+    cues: cuesFromFault(
+      "sq_fault_2",
+      "Hips and shoulders rose together.",
+      "Slight hip lead on the way up."
+    ),
   },
   barPath: {
     id: "barPath",
-    name: "Bar path (shoulder-midpoint proxy)",
-    // Max horizontal drift as fraction of torso length
-    // StrongLifts: https://stronglifts.com/squat/#Bar_Path
+    name: "Bar path",
     maxDriftFraction: 0.05,
-    passedCue: "Bar tracked a vertical line — good balance.",
-    borderlineCue: "Minor bar path drift — watch forward lean.",
-    failedCue:
-      "Bar drifted horizontally — you lost your balance point over the midfoot. Keep chest up and drive through the heels.",
+    cues: cuesFromFault(
+      "sq_fault_5",
+      "Bar tracked vertically over midfoot.",
+      "Minor bar path drift — watch forward lean."
+    ),
   },
   tempo: {
     id: "tempo",
-    name: "Bottom dwell (stretch reflex)",
-    // StrongLifts: no pause at bottom — use stretch reflex
+    name: "Bottom dwell",
     maxBottomDwellMs: 500,
-    passedCue: "Good tempo — stretch reflex used.",
-    borderlineCue: "Slight pause at bottom — try to reverse immediately.",
-    failedCue:
-      "You paused at the bottom — you lost the stretch reflex. Descend with control and reverse immediately.",
+    cues: {
+      passed: "Tight reversal at the bottom.",
+      borderline: "Slight pause at the bottom — try to reverse immediately.",
+      failed:
+        "Long pause at the bottom. For non-paused squats, descend with control and reverse immediately to use the stretch reflex.",
+    } satisfies CueSet,
   },
   heelLift: {
     id: "heelLift",
-    name: "Heel lift (ankle stability)",
-    // Proxy: large ankle angle change during descent indicates heel rise
-    // StrongLifts: https://stronglifts.com/squat/#Feet
-    maxAnkleFlexChange: 20, // degrees
-    passedCue: "Heels stayed down through the descent.",
-    borderlineCue: "Minor heel movement — verify with front-view footage.",
-    failedCue:
-      "Heel lift detected — work on ankle mobility or elevate heels temporarily while training dorsiflexion.",
+    name: "Heel position",
+    maxAnkleFlexChange: 20,
+    cues: {
+      passed: "Heels stayed planted through the descent.",
+      borderline: "Minor heel movement — verify with front-view footage.",
+      failed:
+        "Heel lift detected. Address ankle mobility (dorsiflexion 20–40° ideal) or use heel-elevated shoes while training mobility.",
+    } satisfies CueSet,
   },
   headPosition: {
     id: "headPosition",
     name: "Head/neck alignment",
-    // StrongLifts: head neutral, neither looking up nor down
     maxDeviationDeg: 35,
-    passedCue: "Head neutral — good spinal alignment.",
-    borderlineCue: "Slight head deviation — keep gaze forward.",
-    failedCue:
-      "Extreme head position — keep gaze forward, not up at the ceiling or down at the floor.",
+    cues: {
+      passed: "Head neutral — good cervical alignment.",
+      borderline: "Slight head deviation — keep gaze steady.",
+      failed:
+        "Extreme head position. Eyes forward or slightly down, no chin jut, no neck hyperextension.",
+    } satisfies CueSet,
   },
   buttWink: {
     id: "buttWink",
     name: "Lower back rounding (butt wink)",
-    // StrongLifts: https://stronglifts.com/squat/#Lower_Back
-    // Hard to detect reliably from 2D side view — high confidence threshold
     minConfidenceToFlag: 0.85,
-    hipShoulderAngleThreshold: 15, // degrees of hip-shoulder line tilt toward floor = wink
-    passedCue: "Lumbar appears neutral at the bottom.",
+    hipShoulderAngleThreshold: 15,
+    cues: cuesFromFault(
+      "sq_fault_3",
+      "Lumbar appears neutral at the bottom."
+    ),
     unknownCue:
       "Cannot reliably assess lower back rounding from this camera angle — requires high-confidence keypoint visibility.",
-    failedCue:
-      "Possible posterior pelvic tilt at the bottom. Strengthen hip flexors and work on thoracic mobility.",
   },
 } as const;
 
@@ -121,21 +142,20 @@ export const SQUAT_RULE_CONFIGS = {
 export function checkDepth(
   frames: PoseFrame[],
   bounds: RepBounds,
-  repNumber: number,
+  _repNumber: number,
   torsoLen: number
 ): RuleResult {
   const cfg = SQUAT_RULE_CONFIGS.depth;
   const bottomFrame = frames[bounds.bottomFrame];
-  if (!bottomFrame) return unknownResult(cfg.id, cfg.name, cfg.failedCue);
+  if (!bottomFrame) return unknownResult(cfg.id, cfg.name, cfg.cues.failed);
 
   const hip = dominantSide(bottomFrame, "left_hip", "right_hip");
   const knee = dominantSide(bottomFrame, "left_knee", "right_knee");
   if (!hip || !knee || hip.visibility < 0.5 || knee.visibility < 0.5) {
-    return unknownResult(cfg.id, cfg.name, cfg.failedCue);
+    return unknownResult(cfg.id, cfg.name, cfg.cues.failed);
   }
 
   const tolerance = torsoLen * cfg.toleranceFraction;
-  // In normalized coords, larger Y = lower. Hip below knee = hip.y > knee.y
   const hipBelowKneeBy = hip.y - knee.y;
   const conf = Math.min(hip.visibility, knee.visibility);
 
@@ -144,32 +164,18 @@ export function checkDepth(
   else if (hipBelowKneeBy > -tolerance) verdict = "borderline";
   else verdict = "failed";
 
-  return {
-    ruleId: cfg.id,
-    ruleName: cfg.name,
-    verdict,
-    value: hipBelowKneeBy,
-    threshold: tolerance,
-    cue:
-      verdict === "passed"
-        ? cfg.passedCue
-        : verdict === "borderline"
-          ? cfg.borderlineCue
-          : cfg.failedCue,
-    frameTimestamp: bottomFrame.timestamp,
-    confidence: conf,
-  };
+  return finalize(cfg.id, cfg.name, verdict, cfg.cues, hipBelowKneeBy, tolerance, conf, bottomFrame.timestamp);
 }
 
 export function checkKneeTravel(
   frames: PoseFrame[],
   bounds: RepBounds,
-  repNumber: number,
+  _repNumber: number,
   torsoLen: number
 ): RuleResult {
   const cfg = SQUAT_RULE_CONFIGS.kneeTravel;
   const repFrames = frames.slice(bounds.startFrame, bounds.bottomFrame + 1);
-  if (repFrames.length < 6) return unknownResult(cfg.id, cfg.name, cfg.passedCue);
+  if (repFrames.length < 6) return unknownResult(cfg.id, cfg.name, cfg.cues.passed);
 
   const kneeX = repFrames.map((f) => {
     const k = dominantSide(f, "left_knee", "right_knee");
@@ -181,7 +187,7 @@ export function checkKneeTravel(
   const secondHalf = kneeX.slice(midDescentIdx).filter((v): v is number => v !== null);
 
   if (!firstHalf.length || !secondHalf.length) {
-    return unknownResult(cfg.id, cfg.name, cfg.passedCue);
+    return unknownResult(cfg.id, cfg.name, cfg.cues.passed);
   }
 
   const peakFirstHalf = Math.max(...firstHalf);
@@ -195,34 +201,20 @@ export function checkKneeTravel(
   else verdict = "failed";
 
   const conf = mean(
-    repFrames
-      .map((f) => dominantSide(f, "left_knee", "right_knee")?.visibility ?? 0)
+    repFrames.map((f) => dominantSide(f, "left_knee", "right_knee")?.visibility ?? 0)
   );
 
-  return {
-    ruleId: cfg.id,
-    ruleName: cfg.name,
-    verdict,
-    value: continuedDrift,
-    threshold: driftThreshold,
-    cue:
-      verdict === "passed"
-        ? cfg.passedCue
-        : verdict === "borderline"
-          ? cfg.borderlineCue
-          : cfg.failedCue,
-    confidence: conf,
-  };
+  return finalize(cfg.id, cfg.name, verdict, cfg.cues, continuedDrift, driftThreshold, conf);
 }
 
 export function checkHipShoot(
   frames: PoseFrame[],
   bounds: RepBounds,
-  repNumber: number
+  _repNumber: number
 ): RuleResult {
   const cfg = SQUAT_RULE_CONFIGS.hipShoot;
   const ascentFrames = frames.slice(bounds.bottomFrame, bounds.endFrame + 1);
-  if (ascentFrames.length < 4) return unknownResult(cfg.id, cfg.name, cfg.passedCue);
+  if (ascentFrames.length < 4) return unknownResult(cfg.id, cfg.name, cfg.cues.passed);
 
   const hipY = ascentFrames.map((f) => {
     const lh = getKp(f, "left_hip");
@@ -235,7 +227,6 @@ export function checkHipShoot(
     return ls && rs ? midpoint(ls, rs).y : null;
   });
 
-  // Measure rate of change over ascent (Y decreases = moving up)
   const hipDeltas: number[] = [];
   const shoulderDeltas: number[] = [];
   for (let i = 1; i < ascentFrames.length; i++) {
@@ -246,13 +237,12 @@ export function checkHipShoot(
   }
 
   if (!hipDeltas.length || !shoulderDeltas.length) {
-    return unknownResult(cfg.id, cfg.name, cfg.passedCue);
+    return unknownResult(cfg.id, cfg.name, cfg.cues.passed);
   }
 
   const avgHipRate = mean(hipDeltas);
   const avgShoulderRate = mean(shoulderDeltas);
 
-  // If hips rise much faster than shoulders, it's a hip-shoot / good morning
   const divergence = avgHipRate > 0 && avgShoulderRate > 0
     ? (avgHipRate - avgShoulderRate) / Math.max(avgHipRate, avgShoulderRate)
     : 0;
@@ -268,20 +258,7 @@ export function checkHipShoot(
     return ((ls?.visibility ?? 0) + (lh?.visibility ?? 0)) / 2;
   }));
 
-  return {
-    ruleId: cfg.id,
-    ruleName: cfg.name,
-    verdict,
-    value: divergence,
-    threshold: cfg.maxRatioDivergence,
-    cue:
-      verdict === "passed"
-        ? cfg.passedCue
-        : verdict === "borderline"
-          ? cfg.borderlineCue
-          : cfg.failedCue,
-    confidence: conf,
-  };
+  return finalize(cfg.id, cfg.name, verdict, cfg.cues, divergence, cfg.maxRatioDivergence, conf);
 }
 
 export function checkBarPath(
@@ -301,19 +278,15 @@ export function checkBarPath(
     return null;
   }).filter((v): v is number => v !== null);
 
-  if (barX.length < 4) return unknownResult(cfg.id, cfg.name, cfg.passedCue);
+  if (barX.length < 4) return unknownResult(cfg.id, cfg.name, cfg.cues.passed);
 
   const smoothedBarX = smoothMovingAverage(barX, 5);
-  const minX = Math.min(...smoothedBarX);
-  const maxX = Math.max(...smoothedBarX);
-  const drift = maxX - minX;
+  const drift = Math.max(...smoothedBarX) - Math.min(...smoothedBarX);
   const driftFraction = torsoLen > 0 ? drift / torsoLen : drift;
 
-  const driftThreshold = cfg.maxDriftFraction;
-
   let verdict: RuleVerdict;
-  if (driftFraction <= driftThreshold / 2) verdict = "passed";
-  else if (driftFraction <= driftThreshold) verdict = "borderline";
+  if (driftFraction <= cfg.maxDriftFraction / 2) verdict = "passed";
+  else if (driftFraction <= cfg.maxDriftFraction) verdict = "borderline";
   else verdict = "failed";
 
   const conf = mean(repFrames.map((f) => {
@@ -322,44 +295,16 @@ export function checkBarPath(
     return ((ls?.visibility ?? 0) + (rs?.visibility ?? 0)) / 2;
   }));
 
-  return {
-    ruleId: cfg.id,
-    ruleName: cfg.name,
-    verdict,
-    value: driftFraction * 100,  // store as percentage
-    threshold: driftThreshold * 100,
-    cue:
-      verdict === "passed"
-        ? cfg.passedCue
-        : verdict === "borderline"
-          ? cfg.borderlineCue
-          : cfg.failedCue,
-    confidence: conf,
-  };
+  return finalize(cfg.id, cfg.name, verdict, cfg.cues, driftFraction * 100, cfg.maxDriftFraction * 100, conf);
 }
 
 export function checkTempo(bottomDwellMs: number): RuleResult {
   const cfg = SQUAT_RULE_CONFIGS.tempo;
-
   let verdict: RuleVerdict;
   if (bottomDwellMs <= cfg.maxBottomDwellMs / 2) verdict = "passed";
   else if (bottomDwellMs <= cfg.maxBottomDwellMs) verdict = "borderline";
   else verdict = "failed";
-
-  return {
-    ruleId: cfg.id,
-    ruleName: cfg.name,
-    verdict,
-    value: bottomDwellMs,
-    threshold: cfg.maxBottomDwellMs,
-    cue:
-      verdict === "passed"
-        ? cfg.passedCue
-        : verdict === "borderline"
-          ? cfg.borderlineCue
-          : cfg.failedCue,
-    confidence: 0.9,  // tempo is reliable from timestamps
-  };
+  return finalize(cfg.id, cfg.name, verdict, cfg.cues, bottomDwellMs, cfg.maxBottomDwellMs, 0.9);
 }
 
 export function checkHeelLift(
@@ -369,8 +314,6 @@ export function checkHeelLift(
   const cfg = SQUAT_RULE_CONFIGS.heelLift;
   const repFrames = frames.slice(bounds.startFrame, bounds.bottomFrame + 1);
 
-  // Proxy: measure angle at ankle (knee-ankle-heel) over descent
-  // Large change indicates heel coming up
   const ankleAngles = repFrames.map((f) => {
     const knee = dominantSide(f, "left_knee", "right_knee");
     const ankle = dominantSide(f, "left_ankle", "right_ankle");
@@ -380,7 +323,7 @@ export function checkHeelLift(
     return angleDeg(knee, ankle, heel);
   }).filter((v): v is number => v !== null);
 
-  if (ankleAngles.length < 4) return unknownResult(cfg.id, cfg.name, cfg.passedCue);
+  if (ankleAngles.length < 4) return unknownResult(cfg.id, cfg.name, cfg.cues.passed);
 
   const firstAvg = mean(ankleAngles.slice(0, 3));
   const lastAvg = mean(ankleAngles.slice(-3));
@@ -396,20 +339,7 @@ export function checkHeelLift(
     return ankle?.visibility ?? 0;
   }));
 
-  return {
-    ruleId: cfg.id,
-    ruleName: cfg.name,
-    verdict,
-    value: change,
-    threshold: cfg.maxAnkleFlexChange,
-    cue:
-      verdict === "passed"
-        ? cfg.passedCue
-        : verdict === "borderline"
-          ? cfg.borderlineCue
-          : cfg.failedCue,
-    confidence: conf,
-  };
+  return finalize(cfg.id, cfg.name, verdict, cfg.cues, change, cfg.maxAnkleFlexChange, conf);
 }
 
 export function checkHeadPosition(
@@ -418,17 +348,16 @@ export function checkHeadPosition(
 ): RuleResult {
   const cfg = SQUAT_RULE_CONFIGS.headPosition;
   const bottomFrame = frames[bounds.bottomFrame];
-  if (!bottomFrame) return unknownResult(cfg.id, cfg.name, cfg.passedCue);
+  if (!bottomFrame) return unknownResult(cfg.id, cfg.name, cfg.cues.passed);
 
   const nose = getKp(bottomFrame, "nose");
   const ls = getKp(bottomFrame, "left_shoulder");
   const rs = getKp(bottomFrame, "right_shoulder");
-  if (!nose || !ls || !rs) return unknownResult(cfg.id, cfg.name, cfg.passedCue);
+  if (!nose || !ls || !rs) return unknownResult(cfg.id, cfg.name, cfg.cues.passed);
 
   const shoulderMid = midpoint(ls, rs);
-  // Angle of nose relative to shoulder midpoint (vertical = 90°)
   const dx = nose.x - shoulderMid.x;
-  const dy = nose.y - shoulderMid.y; // negative = nose above shoulders (expected)
+  const dy = nose.y - shoulderMid.y;
   const angleFromVertical = Math.abs(Math.atan2(dx, -dy) * (180 / Math.PI));
 
   let verdict: RuleVerdict;
@@ -437,34 +366,18 @@ export function checkHeadPosition(
   else verdict = "failed";
 
   const conf = Math.min(nose.visibility, (ls.visibility + rs.visibility) / 2);
-
-  return {
-    ruleId: cfg.id,
-    ruleName: cfg.name,
-    verdict,
-    value: angleFromVertical,
-    threshold: cfg.maxDeviationDeg,
-    cue:
-      verdict === "passed"
-        ? cfg.passedCue
-        : verdict === "borderline"
-          ? cfg.borderlineCue
-          : cfg.failedCue,
-    confidence: conf,
-  };
+  return finalize(cfg.id, cfg.name, verdict, cfg.cues, angleFromVertical, cfg.maxDeviationDeg, conf);
 }
 
 export function checkButtWink(
   frames: PoseFrame[],
   bounds: RepBounds,
-  torsoLen: number
+  _torsoLen: number
 ): RuleResult {
   const cfg = SQUAT_RULE_CONFIGS.buttWink;
   const bottomFrame = frames[bounds.bottomFrame];
   if (!bottomFrame) return unknownResult(cfg.id, cfg.name, cfg.unknownCue);
 
-  // Hip-shoulder angle proxy: if hips tuck under (posterior pelvic tilt), the
-  // hip-shoulder vector tilts forward (hip X moves ahead of shoulder X)
   const hip = dominantSide(bottomFrame, "left_hip", "right_hip");
   const shoulder = dominantSide(bottomFrame, "left_shoulder", "right_shoulder");
   if (!hip || !shoulder) return unknownResult(cfg.id, cfg.name, cfg.unknownCue);
@@ -474,8 +387,6 @@ export function checkButtWink(
     return { ruleId: cfg.id, ruleName: cfg.name, verdict: "unknown", cue: cfg.unknownCue, confidence: conf };
   }
 
-  // In side view: if hip X is significantly further forward than shoulder X (camera-right),
-  // it suggests posterior tilt. This is a weak proxy.
   const hipShoulderXDiff = Math.abs(hip.x - shoulder.x);
   const tiltAngle = Math.atan2(hipShoulderXDiff, Math.abs(shoulder.y - hip.y)) * (180 / Math.PI);
 
@@ -484,15 +395,7 @@ export function checkButtWink(
   else if (tiltAngle < cfg.hipShoulderAngleThreshold) verdict = "borderline";
   else verdict = "failed";
 
-  return {
-    ruleId: cfg.id,
-    ruleName: cfg.name,
-    verdict,
-    value: tiltAngle,
-    threshold: cfg.hipShoulderAngleThreshold,
-    cue: verdict === "passed" ? cfg.passedCue : verdict === "failed" ? cfg.failedCue : cfg.unknownCue,
-    confidence: conf,
-  };
+  return finalize(cfg.id, cfg.name, verdict, cfg.cues, tiltAngle, cfg.hipShoulderAngleThreshold, conf);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -501,7 +404,24 @@ function unknownResult(ruleId: string, ruleName: string, cue: string): RuleResul
   return { ruleId, ruleName, verdict: "unknown", cue, confidence: 0 };
 }
 
-/** Compute bar path drift as a percentage of torso length */
+function finalize(
+  ruleId: string,
+  ruleName: string,
+  verdict: RuleVerdict,
+  cues: CueSet,
+  value: number,
+  threshold: number,
+  confidence: number,
+  frameTimestamp?: number
+): RuleResult {
+  const cue =
+    verdict === "passed" ? cues.passed
+    : verdict === "borderline" ? cues.borderline
+    : cues.failed;
+  return { ruleId, ruleName, verdict, value, threshold, cue, confidence, frameTimestamp };
+}
+
+/** Compute bar path drift as a percentage of torso length (used in RepMetrics). */
 export function computeBarPathDriftPercent(
   frames: PoseFrame[],
   bounds: RepBounds,

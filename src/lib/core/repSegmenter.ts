@@ -7,28 +7,67 @@ export interface RepBounds {
   endFrame: number;
 }
 
-interface SegmentOptions {
+/**
+ * Per-frame primary-signal extractor. Returns the Y value to track, or -1 if
+ * the keypoint isn't visible enough to use (will be filled by interpolation).
+ *
+ * Convention used by the FSM below: larger value = "deeper into the rep"
+ * (further from the standing/start position). For lifts that start at the
+ * top (squat, bench, RDL), use raw hip-Y or wrist-Y. For lifts that start
+ * at the bottom (deadlift), negate the Y so liftoff registers as descent.
+ */
+export type SignalExtractor = (frame: PoseFrame) => number;
+
+export interface SegmentOptions {
   smoothingWindow?: number;
-  // Minimum hip Y change to count as a descent (as fraction of frame height)
+  /** Min depth change to count as a real rep (filters walkout/setup noise) */
   minDepthThreshold?: number;
-  // How many frames of "plateau" to consider the bottom reached
   bottomWindowFrames?: number;
-  // Minimum frames a rep must span to be valid (filters out noise)
   minRepFrames?: number;
+  /** Override the default hip-midpoint signal extractor */
+  signal?: SignalExtractor;
 }
 
+/** Missing-frame sentinel — any extractor that can't read its keypoint returns NaN. */
+const MISSING = NaN;
+
+export const hipYSignal: SignalExtractor = (f) => {
+  const lh = getKp(f, "left_hip");
+  const rh = getKp(f, "right_hip");
+  if (lh && rh) return midpoint(lh, rh).y;
+  if (lh) return lh.y;
+  if (rh) return rh.y;
+  return MISSING;
+};
+
 /**
- * Rep segmentation based on hip-midpoint Y trajectory.
+ * Wrist-Y for bench: bar tracks with hands, descends toward chest.
+ * Same direction convention as hip-Y for squat (down = larger Y).
+ */
+export const wristYSignal: SignalExtractor = (f) => {
+  const lw = getKp(f, "left_wrist");
+  const rw = getKp(f, "right_wrist");
+  if (lw && rw) return midpoint(lw, rw).y;
+  if (lw) return lw.y;
+  if (rw) return rw.y;
+  return MISSING;
+};
+
+/**
+ * Inverted wrist-Y for deadlift: lift starts on floor (large Y) and the
+ * "rep peak" is at standing (small Y). Negating flips the trajectory into
+ * the same up→down→up shape the FSM expects.
+ */
+export const invertedWristYSignal: SignalExtractor = (f) => {
+  const v = wristYSignal(f);
+  return Number.isNaN(v) ? MISSING : -v;
+};
+
+/**
+ * Rep segmentation FSM driven by a configurable primary signal.
  *
- * In MediaPipe normalized coords, Y increases downward, so a descent means
- * hip Y is *increasing* (hips moving toward floor).
- *
- * Strategy:
- *   1. Extract hip Y values across all frames.
- *   2. Smooth with moving average to remove keypoint jitter.
- *   3. Find local maxima (standing) and local minima (bottom).
- *   4. Pair each max→min→max as one rep.
- *   5. Filter by minimum depth change to exclude walkout steps.
+ * The signal must follow the convention: larger value = deeper into rep.
+ * The FSM walks: standing → descending → bottom → ascending → standing.
  */
 export function segmentReps(
   frames: PoseFrame[],
@@ -37,37 +76,27 @@ export function segmentReps(
   const {
     smoothingWindow = 7,
     minDepthThreshold = 0.08,
-    bottomWindowFrames = 3,
     minRepFrames = 15,
+    signal = hipYSignal,
   } = options;
 
   if (frames.length < minRepFrames) return [];
 
-  // Extract hip midpoint Y per frame
-  const hipY = frames.map((f) => {
-    const lh = getKp(f, "left_hip");
-    const rh = getKp(f, "right_hip");
-    if (lh && rh) return midpoint(lh, rh).y;
-    if (lh) return lh.y;
-    if (rh) return rh.y;
-    return -1; // missing
-  });
-
-  // Interpolate missing values linearly
-  const filled = fillMissing(hipY);
+  const raw = frames.map(signal);
+  const filled = fillMissing(raw);
   const smoothed = smoothMovingAverage(filled, smoothingWindow);
 
-  // Find descent/ascent transitions using a finite state machine
   const reps: RepBounds[] = [];
   let state: "standing" | "descending" | "bottom" | "ascending" = "standing";
   let repStart = 0;
   let bottomFrame = 0;
   let bottomY = smoothed[0];
 
-  const HYSTERESIS = 0.02; // prevents jitter-triggered transitions
+  // Hysteresis must be smaller than the per-frame change after smoothing.
+  const HYSTERESIS = 0.004;
 
   for (let i = 1; i < smoothed.length; i++) {
-    const dy = smoothed[i] - smoothed[i - 1]; // positive = moving down
+    const dy = smoothed[i] - smoothed[i - 1];
 
     switch (state) {
       case "standing": {
@@ -83,22 +112,19 @@ export function segmentReps(
           bottomY = smoothed[i];
           bottomFrame = i;
         }
-        // Transition to bottom when movement reverses
         if (dy < -HYSTERESIS) {
           state = "bottom";
         }
         break;
       }
       case "bottom": {
-        // Linger here until we confirm ascent is real
-        if (dy > HYSTERESIS) {
+        if (dy < -HYSTERESIS) {
           state = "ascending";
         }
         break;
       }
       case "ascending": {
-        if (dy < -HYSTERESIS) {
-          // Rep complete: hips back at top
+        if (dy > HYSTERESIS) {
           const repEnd = i;
           const totalFrames = repEnd - repStart;
           const depthChange = smoothed[bottomFrame] - smoothed[repStart];
@@ -107,15 +133,21 @@ export function segmentReps(
             reps.push({ startFrame: repStart, bottomFrame, endFrame: repEnd });
           }
 
-          // Start looking for the next rep from current position
           state = "standing";
           repStart = i;
           bottomY = smoothed[i];
-        } else if (smoothed[i] > smoothed[bottomFrame] + HYSTERESIS) {
-          // Still going up - track bottom correctly
         }
         break;
       }
+    }
+  }
+
+  if (state === "ascending") {
+    const repEnd = smoothed.length - 1;
+    const totalFrames = repEnd - repStart;
+    const depthChange = smoothed[bottomFrame] - smoothed[repStart];
+    if (totalFrames >= minRepFrames && depthChange >= minDepthThreshold) {
+      reps.push({ startFrame: repStart, bottomFrame, endFrame: repEnd });
     }
   }
 
@@ -124,10 +156,9 @@ export function segmentReps(
 
 function fillMissing(values: number[]): number[] {
   const result = [...values];
-  // Forward fill first
-  let last = values.find((v) => v >= 0) ?? 0.5;
+  let last = values.find((v) => !Number.isNaN(v)) ?? 0.5;
   for (let i = 0; i < result.length; i++) {
-    if (result[i] < 0) result[i] = last;
+    if (Number.isNaN(result[i])) result[i] = last;
     else last = result[i];
   }
   return result;

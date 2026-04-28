@@ -1,10 +1,14 @@
 import type { LiftAnalyzer } from "../core/types";
 import { SquatAnalyzer } from "./squat/analyzer";
+import { DeadliftAnalyzer } from "./deadlift/analyzer";
+import { BenchPressAnalyzer } from "./bench/analyzer";
+import { RDLAnalyzer } from "./rdl/analyzer";
 
-// Registry of all lift analyzers.
-// To add deadlift: import DeadliftAnalyzer and add it here.
 const analyzers: Record<string, LiftAnalyzer> = {
   squat: new SquatAnalyzer(),
+  deadlift: new DeadliftAnalyzer(),
+  bench_press: new BenchPressAnalyzer(),
+  romanian_deadlift: new RDLAnalyzer(),
 };
 
 export function getAnalyzer(liftType: string): LiftAnalyzer | null {

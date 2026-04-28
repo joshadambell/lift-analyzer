@@ -37,6 +37,12 @@ const KEY_VISIBILITY_LANDMARKS = [
 let poseLandmarkerModule: typeof import("@mediapipe/tasks-vision") | null = null;
 let poseLandmarker: import("@mediapipe/tasks-vision").PoseLandmarker | null = null;
 
+// MediaPipe's PoseLandmarker enforces strictly monotonic timestamps across
+// every detectForVideo call on the same instance. Each new video resets
+// real time to 0, so we offset MediaPipe-side timestamps by the running max
+// to keep the invariant. PoseFrame.timestamp still stores real video time.
+let mediaPipeTimestampOffsetMs = 0;
+
 async function ensurePoseLandmarker() {
   if (poseLandmarker) return poseLandmarker;
 
@@ -45,22 +51,35 @@ async function ensurePoseLandmarker() {
   }
   const { PoseLandmarker, FilesetResolver } = poseLandmarkerModule;
 
-  const vision = await FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-  );
+  // Use locally-bundled WASM to avoid CDN version mismatch (installed: 0.10.35)
+  // and cross-origin issues. Files are in public/mediapipe/wasm/.
+  const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
 
-  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath:
-        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
-      delegate: "GPU",
-    },
-    runningMode: "VIDEO",
+  // Model also served locally to satisfy COEP: require-corp.
+  const MODEL_URL = "/mediapipe/pose_landmarker_lite.task";
+
+  const commonOptions = {
+    runningMode: "VIDEO" as const,
     numPoses: 1,
     minPoseDetectionConfidence: 0.5,
     minPosePresenceConfidence: 0.5,
     minTrackingConfidence: 0.5,
-  });
+  };
+
+  // Try GPU first; fall back to CPU if WebGL/GPU context fails (common in
+  // privacy-hardened browsers like Brave with WebGL blocked).
+  try {
+    poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
+      ...commonOptions,
+    });
+  } catch (gpuErr) {
+    console.warn("[poseExtractor] GPU delegate failed, falling back to CPU:", gpuErr);
+    poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
+      ...commonOptions,
+    });
+  }
 
   return poseLandmarker;
 }
@@ -96,7 +115,9 @@ export async function extractPosesFromVideo(
     await seekTo(video, currentTime);
 
     const timestampMs = currentTime * 1000;
-    const result = landmarker.detectForVideo(video, timestampMs);
+    // MediaPipe sees offset+videoTime to satisfy monotonic-clock requirement
+    // across multiple analyses on the same landmarker instance.
+    const result = landmarker.detectForVideo(video, mediaPipeTimestampOffsetMs + timestampMs);
 
     if (result.landmarks.length > 0) {
       const landmarks = result.landmarks[0];
@@ -129,6 +150,12 @@ export async function extractPosesFromVideo(
   }
 
   URL.revokeObjectURL(url);
+
+  // Bump the MediaPipe timestamp offset past this video's last timestamp so
+  // the next analysis starts in valid (still-increasing) timestamp territory.
+  // +1000ms buffer to be safe against any interleaved calls.
+  mediaPipeTimestampOffsetMs += duration * 1000 + 1000;
+
   onProgress?.(100);
   return frames;
 }

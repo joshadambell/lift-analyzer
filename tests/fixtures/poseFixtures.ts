@@ -31,30 +31,32 @@ interface SquatPose {
 function buildFrame(pose: SquatPose, timestampMs: number, frameIndex: number): PoseFrame {
   const { hipY, kneeY, shoulderY, ankleY, kneeX, shoulderX, hipX } = pose;
 
+  // Side-view camera: near side (left) fully visible, far side (right) partially occluded.
+  // This asymmetry is what estimateSideViewConfidence detects.
   return {
     timestamp: timestampMs,
     frameIndex,
     confidence: 0.9,
     keypoints: {
       nose: kp(shoulderX, shoulderY - 0.15),
-      left_shoulder: kp(shoulderX - 0.04, shoulderY),
-      right_shoulder: kp(shoulderX + 0.04, shoulderY),
+      left_shoulder: kp(shoulderX - 0.04, shoulderY, 0.95),
+      right_shoulder: kp(shoulderX + 0.04, shoulderY, 0.55),  // far side, lower visibility
       left_elbow: kp(shoulderX - 0.08, shoulderY + 0.1),
-      right_elbow: kp(shoulderX + 0.08, shoulderY + 0.1),
+      right_elbow: kp(shoulderX + 0.08, shoulderY + 0.1, 0.50),
       left_wrist: kp(shoulderX - 0.06, shoulderY + 0.05),
-      right_wrist: kp(shoulderX + 0.06, shoulderY + 0.05),
-      left_hip: kp(hipX - 0.03, hipY),
-      right_hip: kp(hipX + 0.03, hipY),
-      left_knee: kp(kneeX - 0.03, kneeY),
-      right_knee: kp(kneeX + 0.03, kneeY),
+      right_wrist: kp(shoulderX + 0.06, shoulderY + 0.05, 0.45),
+      left_hip: kp(hipX - 0.03, hipY, 0.95),
+      right_hip: kp(hipX + 0.03, hipY, 0.65),  // far hip, lower visibility
+      left_knee: kp(kneeX - 0.03, kneeY, 0.95),
+      right_knee: kp(kneeX + 0.03, kneeY, 0.60),
       left_ankle: kp(kneeX - 0.02, ankleY),
-      right_ankle: kp(kneeX + 0.02, ankleY),
+      right_ankle: kp(kneeX + 0.02, ankleY, 0.70),
       left_heel: kp(kneeX - 0.04, ankleY + 0.02),
-      right_heel: kp(kneeX + 0.04, ankleY + 0.02),
+      right_heel: kp(kneeX + 0.04, ankleY + 0.02, 0.65),
       left_foot_index: kp(kneeX - 0.01, ankleY + 0.04),
-      right_foot_index: kp(kneeX + 0.01, ankleY + 0.04),
-      left_ear: kp(shoulderX - 0.06, shoulderY - 0.1, 0.6),
-      right_ear: kp(shoulderX + 0.06, shoulderY - 0.1, 0.3), // side view: one ear occluded
+      right_foot_index: kp(kneeX + 0.01, ankleY + 0.04, 0.65),
+      left_ear: kp(shoulderX - 0.06, shoulderY - 0.1, 0.85),
+      right_ear: kp(shoulderX + 0.06, shoulderY - 0.1, 0.20),  // far ear, mostly occluded
     },
   };
 }

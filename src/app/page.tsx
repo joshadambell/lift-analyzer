@@ -5,8 +5,12 @@ import { VideoUpload } from "@/components/VideoUpload";
 import { AnalysisReport } from "@/components/AnalysisReport";
 import type { FormAnalysis } from "@/lib/core/types";
 import type { AnalysisProgress } from "@/lib/core/orchestrator";
+import { listLifts, liftDisplayName, type LiftKey } from "@/lib/knowledge";
+
+const LIFTS: LiftKey[] = listLifts();
 
 export default function HomePage() {
+  const [lift, setLift] = useState<LiftKey>("squat");
   const [analysis, setAnalysis] = useState<FormAnalysis | null>(null);
   const [progress, setProgress] = useState<AnalysisProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -18,14 +22,14 @@ export default function HomePage() {
 
     try {
       const { runAnalysis } = await import("@/lib/core/orchestrator");
-      const result = await runAnalysis(file, "squat", setProgress);
+      const result = await runAnalysis(file, lift, setProgress);
       setAnalysis(result);
       setProgress(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed. Please try again.");
       setProgress(null);
     }
-  }, []);
+  }, [lift]);
 
   const reset = useCallback(() => {
     setAnalysis(null);
@@ -41,12 +45,34 @@ export default function HomePage() {
             Lift Form Analyzer
           </h1>
           <p className="text-zinc-400 mt-2 text-sm">
-            Barbell back squat · Side-view video · StrongLifts standard
+            Side-view video form analysis · Squat · Deadlift · Bench · RDL
           </p>
         </div>
 
         {!progress && !analysis && (
-          <VideoUpload onVideoSelected={handleVideoSelected} />
+          <div className="space-y-6">
+            <div>
+              <label className="text-xs text-zinc-400 uppercase tracking-wider mb-3 block">
+                Select lift
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {LIFTS.map((l) => (
+                  <button
+                    key={l}
+                    onClick={() => setLift(l)}
+                    className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors border ${
+                      lift === l
+                        ? "bg-green-600 text-white border-green-500"
+                        : "bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700"
+                    }`}
+                  >
+                    {liftDisplayName(l)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <VideoUpload onVideoSelected={handleVideoSelected} liftName={liftDisplayName(lift)} />
+          </div>
         )}
 
         {progress && (
@@ -85,7 +111,9 @@ export default function HomePage() {
         {analysis && (
           <div>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-white">Analysis Report</h2>
+              <h2 className="text-lg font-semibold text-white">
+                {liftDisplayName(analysis.liftType as LiftKey)} Analysis
+              </h2>
               <button
                 onClick={reset}
                 className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
