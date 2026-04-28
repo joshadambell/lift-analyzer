@@ -1,6 +1,6 @@
 # Lift Form Analyzer
 
-Barbell back squat form analysis from side-view video. Detects reps, checks form against the StrongLifts technique standard, and returns a per-rep report with annotated key frames and coaching cues.
+Side-view barbell form analysis for four lifts: **back squat**, **conventional deadlift**, **bench press**, and **Romanian deadlift**. Detects reps, runs geometric checks against a coaching knowledge base, and returns a per-rep report with coaching cues — powered by MediaPipe in-browser pose estimation and Claude for narrative.
 
 ## Quick start
 
@@ -15,7 +15,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 npm run dev
 ```
 
-Open http://localhost:3000, drop in a side-view squat video, get a report.
+Open http://localhost:3000, select a lift type, drop in a side-view video, get a report.
 
 ## Running tests
 
@@ -23,11 +23,7 @@ Open http://localhost:3000, drop in a side-view squat video, get a report.
 npm test
 ```
 
-Tests use synthetic `PoseFrame[]` data — no real video files needed. Three fixture scenarios:
-
-- `generateGoodSquatVideo()` — two reps with clean depth and minimal knee drift
-- `generateShallowSquatVideo()` — two reps where hip crease stays above knee
-- `generateForwardKneeDriftVideo()` — one rep where knee continues forward past mid-descent
+Tests use synthetic `PoseFrame[]` data — no real video files needed.
 
 ---
 
@@ -37,80 +33,98 @@ Tests use synthetic `PoseFrame[]` data — no real video files needed. Three fix
 
 **Decision:** Next.js web app, run locally with `npm run dev`.
 
-**Why not iOS native?** Requires Xcode, a developer account, and doesn't run on Windows/Linux. The MVP needs to be runnable by anyone with Node.js.
+**Why not native mobile?** Requires platform SDKs and distribution. A browser app runs on any OS with Node.js, no app store needed.
 
-**Why not React Native / Flutter?** Cross-platform mobile adds build toolchain complexity. For an MVP a browser app is simpler: one command to run, no app stores, works on any OS.
-
-**Trade-off accepted:** Browser-based MediaPipe WASM is slightly slower than native Vision framework on Apple Silicon. For pre-recorded video analysis (~30s target) this is acceptable — we're not doing real-time.
+**Trade-off accepted:** Browser-based MediaPipe WASM is slightly slower than native Vision framework. For pre-recorded video analysis this is acceptable — we're not doing real-time.
 
 ### 2. Pose pipeline: Hybrid (MediaPipe + Claude)
 
 **Decision:** In-browser MediaPipe `PoseLandmarker` (BlazePose Lite) for geometry → Claude API for coaching narrative.
 
-**Why hybrid over pure rule-based?** Rule-based gives correct verdicts but robotic output ("depth: FAILED"). A coach's voice — "your hips shot up on rep 3, drive chest and hips together" — is what actually helps the lifter. The LLM is good at that.
-
-**Why hybrid over pure LLM vision?** A vision LLM can't reliably count reps or give pixel-level depth verdicts. It also costs ~$0.05–0.20/video on sampled frames vs. ~$0.001 for a compact JSON summary to Claude. The geometric pipeline is deterministic — the same video always produces the same depth verdict.
+**Why hybrid over pure LLM vision?** A vision LLM can't reliably count reps or give pixel-level depth verdicts. The geometric pipeline is deterministic — same video always produces same verdict. The LLM handles natural coaching language.
 
 **Pipeline flow:**
 ```
 Video file
   → MediaPipe PoseLandmarker (WASM, in-browser)
   → PoseFrame[] (33 keypoints × N frames)
-  → Rep segmentation (hip-Y FSM)
-  → Per-rep geometric checks (rules.ts)
+  → Rep segmentation (lift-specific signal FSM)
+  → Per-rep geometric checks (rules.ts per lift)
   → FormAnalysis (structured JSON)
-  → Claude API (compact JSON summary → narrative)
+  → Claude API (compact JSON + KB context → narrative)
   → Report rendered to user
 ```
 
-### 3. Bar path estimation
+### 3. Knowledge base architecture
 
-**Implementation:** The shoulder midpoint (`(left_shoulder + right_shoulder) / 2`) proxies bar position.
+**Decision:** Coaching language lives in `src/lib/knowledge/lifts.json`; geometric thresholds and detection logic live in code.
 
-**Why:** The bar isn't a body keypoint. For high-bar squat the bar sits on the traps just above the shoulder line. For low-bar it sits 2–3 inches lower, so drift estimates will appear slightly smaller than reality.
+**Why separate KB from code?** The KB contains coaching vocabulary (fault descriptions, corrections, cue language) sourced from established technique standards. These change for editorial reasons independent of detection math. Keeping them separate means a coach can update cue text without touching analyzer logic.
 
-**Failure modes:**
-- Loose clothing creates keypoint noise — smoothed with 5-frame moving average
-- Camera jitter adds systematic horizontal drift to all readings
-- Low-bar placement introduces a constant Y-offset (not a drift error)
+**Usage pattern:**
+- `getFault(liftKey, faultId)` — looks up a fault by ID, returns description + corrections
+- Rule files call `cuesFromFault()` to generate passed/borderline/failed cue sets
+- The narrative API injects relevant KB context for the top rule failures
 
-Bar drift is reported as a percentage of torso length to normalize across camera distances.
+### 4. Rep segmentation — signal abstraction
 
-### 4. Rep segmentation
+**Decision:** `segmentReps()` accepts a `SignalExtractor` function instead of hard-coding hip-Y.
 
-**Algorithm:** Finite state machine on smoothed hip-midpoint Y values.
+**Why:** Different lifts need different signals:
+- **Squat / RDL:** `hipYSignal` — hip rises and falls
+- **Bench press:** `wristYSignal` — wrist descends to chest and returns
+- **Deadlift:** `invertedWristYSignal` — wrist rises to lockout; negated so the same FSM logic applies
 
-**States:** `standing → descending → bottom → ascending → standing`
+Using `NaN` (not `-1`) as the missing-keypoint sentinel was necessary because inverted signal values are in `[-1, 0]`.
 
-**Smoothing:** 7-frame moving average on hip Y before FSM processing. Missing frames (occluded keypoints) are forward-filled.
+### 5. Bar path estimation
 
-**Walkout/rerack filtering:** A rep must show ≥8% hip Y change and span ≥15 frames (~1 second at 15fps). This filters short vertical movements from walkout steps.
+**Implementation:** Wrist midpoint proxies bar position for most lifts. Shoulder midpoint is used for squat bar path.
 
-**Hysteresis:** 2% Y-change threshold prevents noise-triggered state transitions.
+Bar drift is reported as a percentage of torso length to normalize across camera distances and body sizes.
 
 ---
 
-## Form rules (StrongLifts source)
+## Supported lifts and checks
 
-All thresholds are configurable in `SQUAT_RULE_CONFIGS` in `src/lib/analyzers/squat/rules.ts` — no code change needed to tune them.
+### Back squat
 
-| Rule | StrongLifts reference | Implementation |
-|------|----------------------|----------------|
-| Depth | "Squat Depth" | Hip-Y vs Knee-Y at bottom + torso tolerance |
-| Knee travel | "Knees" | Knee-X change in second half of descent |
-| Hip shoot | "Back Angle" | Hip vs shoulder ascent rate ratio |
-| Bar path | "Bar Path" | Shoulder-midpoint X drift as % of torso |
-| Bottom dwell | "Descent & Ascent" | Dwell time in ms |
-| Heel lift | "Feet" | Ankle angle change proxy |
-| Head position | (implied) | Nose angle vs shoulder line |
-| Butt wink | "Lower Back" | Hip-shoulder vector proxy (low confidence — flagged conservatively) |
+| Rule | What's checked |
+|------|----------------|
+| Depth | Hip crease vs. knee crease at bottom |
+| Knee travel | Knee-X forward drift in second half of descent |
+| Hip shoot | Hip vs. shoulder ascent rate ratio |
+| Bar path | Shoulder-midpoint X drift as % of torso |
+| Bottom dwell | Dwell time at the hole |
+| Heel lift | Ankle angle change proxy |
 
-### Conflicts with StrongLifts page
+### Conventional deadlift
 
-If the StrongLifts page is updated, the page wins. Flag here:
+| Rule | What's checked |
+|------|----------------|
+| Hip shoot | Hip vs. shoulder rise rate in first 30% of pull |
+| Bar drift | Wrist-X distance from ankle during concentric |
+| Lockout | Backward lean at lockout (sign-aware via `facingSign()`) |
+| Hitching | Non-monotonic wrist-Y stalls during concentric |
 
-- **Stance width:** Analyzer flags via shoulder-to-heel distance but doesn't reject borderline stances. StrongLifts specifies "shoulder-width" which coaches interpret differently.
-- **Heel lift:** We use an ankle angle proxy from side view. StrongLifts page recommends front-view verification — we note this in the report.
+### Bench press
+
+| Rule | What's checked |
+|------|----------------|
+| Pause | Dwell time at chest (bounce detection) |
+| Lockout | Elbow extension angle at finish |
+| Butt lift | Hip-Y deviation from setup baseline during press |
+| Bar path | Wrist-X horizontal drift during rep |
+
+> **Note:** Elbow flare and uneven bar path require a front view and are not detected. The KB context for those faults is sent to the narrative model, which can mention them generically.
+
+### Romanian deadlift
+
+| Rule | What's checked |
+|------|----------------|
+| Squat pattern | Knee angle change (should stay near-constant in RDL) |
+| Bar drift | Wrist-X distance from knee during descent |
+| Hyperextension | Backward lean at lockout (sign-aware) |
 
 ---
 
@@ -118,27 +132,9 @@ If the StrongLifts page is updated, the page wins. Flag here:
 
 1. **Side-view only.** Front or 45° footage is rejected.
 2. **Single person.** Only the most confident detection is used.
-3. **Low-bar vs. high-bar not distinguished.** Both use the same rules; bar-path proxy is less accurate for low-bar.
-4. **Butt wink detection is weak.** 2D pose can't reliably distinguish posterior pelvic tilt from forward hip hinge. High-confidence threshold; marked `unknown` when below it.
-5. **Occlusion by rack.** Keypoint confidence drops if lifter is partially occluded; affected rules return `unknown`.
-
----
-
-## Roadmap: adding deadlift
-
-1. Create `src/lib/analyzers/deadlift/rules.ts` with deadlift rule configs (hip hinge angle, bar over midfoot, back angle through the pull, lockout).
-2. Create `src/lib/analyzers/deadlift/analyzer.ts` implementing `LiftAnalyzer`.
-3. Register in `src/lib/analyzers/index.ts`:
-   ```typescript
-   import { DeadliftAnalyzer } from "./deadlift/analyzer";
-   const analyzers = {
-     squat: new SquatAnalyzer(),
-     deadlift: new DeadliftAnalyzer(),
-   };
-   ```
-4. Add a lift selector to `page.tsx`.
-
-The pose extractor, rep segmenter, report renderer, and Claude narrative route require **zero changes**.
+3. **Facing direction.** `facingSign()` uses toe vs. heel X to determine camera orientation for signed lean measurements. Returns `unknown` for checks requiring it when foot keypoints aren't visible.
+4. **Bench butt-lift.** Baseline is taken from the first 5 setup frames. Very short videos or late camera cuts may affect baseline quality.
+5. **Deadlift sumo.** Bar drift check uses ankle as reference (conventional). Sumo stance produces systematically higher drift readings.
 
 ---
 
@@ -147,21 +143,34 @@ The pose extractor, rep segmenter, report renderer, and Claude narrative route r
 ```
 src/
   lib/
+    knowledge/
+      lifts.json          # KB: fault descriptions, corrections, coaching cues
+      index.ts            # getFault(), getLift(), liftDisplayName(), etc.
     core/
-      types.ts            # All shared types + LiftAnalyzer interface
-      geometry.ts         # Pure geometric helpers
-      repSegmenter.ts     # Hip-Y FSM rep detection
-      poseExtractor.ts    # MediaPipe integration (client-side)
+      types.ts            # Shared types + LiftAnalyzer interface
+      geometry.ts         # Geometric helpers (angleDeg, facingSign, torsoLength…)
+      repSegmenter.ts     # FSM rep detection with pluggable signal extractor
+      poseExtractor.ts    # MediaPipe PoseLandmarker integration (client-side)
+      analysisCommon.ts   # Shared helpers (estimateBottomDwell, buildTopFixes…)
       reportRenderer.ts   # Canvas skeleton + bar-path overlay
       orchestrator.ts     # End-to-end pipeline coordinator
     analyzers/
-      index.ts            # Lift registry
+      index.ts            # Lift registry { squat, deadlift, bench_press, romanian_deadlift }
       squat/
-        rules.ts          # Rule configs + geometric checks
-        analyzer.ts       # SquatAnalyzer implements LiftAnalyzer
+        rules.ts
+        analyzer.ts
+      deadlift/
+        rules.ts
+        analyzer.ts
+      bench/
+        rules.ts
+        analyzer.ts
+      rdl/
+        rules.ts
+        analyzer.ts
   app/
-    page.tsx
-    api/narrative/        # Claude API route
+    page.tsx              # Lift selector + upload UI
+    api/narrative/        # Claude coaching narrative route
   components/
     VideoUpload.tsx
     AnalysisReport.tsx
@@ -170,3 +179,13 @@ tests/
   fixtures/poseFixtures.ts
   squat.test.ts
 ```
+
+## Adding a new lift
+
+1. Add an entry to `src/lib/knowledge/lifts.json` with faults, corrections, and joint angles.
+2. Create `src/lib/analyzers/<lift>/rules.ts` — use `cuesFromFault()` for coaching language, write geometric checks as pure functions over `PoseFrame[]`.
+3. Create `src/lib/analyzers/<lift>/analyzer.ts` implementing `LiftAnalyzer` — pick the appropriate `SignalExtractor` for rep segmentation.
+4. Register in `src/lib/analyzers/index.ts`.
+5. Add `RULE_TO_FAULT` entries in `src/app/api/narrative/route.ts` for KB context injection.
+
+The pose extractor, report renderer, and narrative route require no changes.
