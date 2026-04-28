@@ -1,0 +1,679 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "target_audience": "intermediate_competitive",
+    "lifts_covered": ["squat", "deadlift", "bench_press", "romanian_deadlift"],
+    "purpose": "Video-based form analysis AI knowledge base",
+    "analysis_focus": [
+      "bar_path",
+      "joint_angles",
+      "body_position",
+      "timing_and_tempo",
+      "common_faults",
+      "fault_corrections"
+    ]
+  },
+  "lifts": {
+    "squat": {
+      "name": "Back Squat",
+      "variants": ["high_bar", "low_bar"],
+      "phases": {
+        "setup": {
+          "description": "Bar placement, stance, and unracking the barbell",
+          "checkpoints": [
+            {
+              "id": "sq_setup_1",
+              "cue": "Bar position",
+              "high_bar": "Bar rests on upper traps, just below C7 vertebra. Elbows tucked under bar to create shelf.",
+              "low_bar": "Bar rests across rear deltoids, 2-3 inches below high bar position. Creates horizontal lever advantage.",
+              "video_cues": ["bar_sits_on_trap_shelf", "no_bar_resting_on_neck"]
+            },
+            {
+              "id": "sq_setup_2",
+              "cue": "Stance width",
+              "standard": "Hip to shoulder-width apart. Toes pointed 15-30 degrees outward. Stance should allow femurs to track over toes throughout descent.",
+              "competitive_note": "Wider stance reduces ROM and allows greater forward lean — common in equipped and raw powerlifting for max load.",
+              "video_cues": ["feet_symmetrical", "toes_flared_appropriately"]
+            },
+            {
+              "id": "sq_setup_3",
+              "cue": "Grip and upper back tightness",
+              "standard": "Grip as narrow as shoulder mobility allows. Create full-body tension before unracking. Retract and depress scapulae.",
+              "competitive_note": "Upper back tightness is critical for bar stability during max effort lifts. Slack in upper back leads to forward collapse.",
+              "video_cues": ["elbows_not_flaring_excessively", "tight_upper_back_shelf_visible"]
+            },
+            {
+              "id": "sq_setup_4",
+              "cue": "Walkout",
+              "standard": "Minimum steps — typically 2-3. Establish stance before descent. Big breath and brace before initiating.",
+              "video_cues": ["controlled_walkout", "no_excessive_steps", "stance_set_before_descent"]
+            }
+          ]
+        },
+        "descent": {
+          "description": "Controlled lowering phase from standing to bottom position",
+          "checkpoints": [
+            {
+              "id": "sq_desc_1",
+              "cue": "Breath and bracing",
+              "standard": "Diaphragmatic breath (360-degree expansion). Valsalva maneuver for max lifts. IAP (intra-abdominal pressure) must be established before descent begins.",
+              "video_cues": ["belly_expands_not_chest", "no_breath_taken_mid_descent"]
+            },
+            {
+              "id": "sq_desc_2",
+              "cue": "Hip hinge initiation",
+              "standard": "Hips break slightly before or simultaneously with knees. Avoid initiating with knees forward — creates excessive anterior shear.",
+              "video_cues": ["hips_move_back_and_down", "knees_track_over_toes_from_start"]
+            },
+            {
+              "id": "sq_desc_3",
+              "cue": "Knee tracking",
+              "standard": "Knees track in line with toes throughout. Neither caving in (valgus) nor collapsing out beyond toes excessively.",
+              "competitive_note": "Slight intentional knee-out cue ('spread the floor') common in competitive powerlifting to engage glutes and maintain hip external rotation.",
+              "video_cues": ["knees_over_toes", "no_knee_cave", "no_excessive_knee_dive"]
+            },
+            {
+              "id": "sq_desc_4",
+              "cue": "Torso angle",
+              "standard": "High bar: more upright torso. Low bar: greater forward lean is expected and biomechanically appropriate. Spine neutral throughout.",
+              "video_cues": ["spine_neutral", "no_lumbar_flexion", "no_excessive_forward_fold_for_bar_position"]
+            },
+            {
+              "id": "sq_desc_5",
+              "cue": "Depth",
+              "standard": "Hip crease at or below top of patella (parallel) for competitive powerlifting standards (IPF/USAPL). Below parallel preferred for full ROM.",
+              "video_cues": ["hip_crease_at_or_below_knee", "depth_reached_before_ascent_begins"]
+            }
+          ]
+        },
+        "bottom_position": {
+          "description": "The transition point — deepest position before ascent",
+          "checkpoints": [
+            {
+              "id": "sq_bot_1",
+              "cue": "No butt wink",
+              "standard": "Lumbar spine remains neutral or slightly extended at the bottom. Posterior pelvic tilt (butt wink) indicates mobility limitation or excessive depth beyond mobility.",
+              "competitive_note": "Mild butt wink tolerated in intermediate lifters, but pronounced tilt under heavy load is an injury risk.",
+              "video_cues": ["lumbar_curve_maintained", "no_lower_back_rounding_at_bottom"]
+            },
+            {
+              "id": "sq_bot_2",
+              "cue": "No forward bar drift",
+              "standard": "Bar path should remain over midfoot. Any forward drift increases moment arm and compressive forces on knees.",
+              "video_cues": ["bar_over_midfoot_at_bottom", "no_forward_shift_of_weight"]
+            }
+          ]
+        },
+        "ascent": {
+          "description": "Drive phase from bottom position back to standing",
+          "checkpoints": [
+            {
+              "id": "sq_asc_1",
+              "cue": "Drive cue",
+              "standard": "Cue is 'drive the traps into the bar' or 'chest up' to prevent forward collapse. Hips and shoulders should rise at the same rate.",
+              "competitive_note": "Good morning squat (hips rise faster than shoulders) is a critical fault under max load — shifts load entirely to posterior chain and can cause lumbar injury.",
+              "video_cues": ["hips_and_shoulders_rise_simultaneously", "no_good_morning_ascent"]
+            },
+            {
+              "id": "sq_asc_2",
+              "cue": "Hip lockout",
+              "standard": "Full hip extension at the top. Glutes squeeze at lockout. No hyperextension of lumbar.",
+              "video_cues": ["full_hip_extension", "glute_activation_visible", "no_lumbar_hyperextension"]
+            },
+            {
+              "id": "sq_asc_3",
+              "cue": "Knee tracking on ascent",
+              "standard": "Knees maintain outward tracking. Valgus collapse on ascent is common under fatigue — a fault in competitive context.",
+              "video_cues": ["knees_tracking_out_on_ascent", "no_knee_cave_during_sticking_point"]
+            }
+          ]
+        }
+      },
+      "common_faults": [
+        {
+          "id": "sq_fault_1",
+          "fault": "Knee valgus (cave)",
+          "description": "Knees collapse inward during descent or ascent",
+          "cause": ["weak_glute_medius", "poor_hip_external_rotation", "fatigue", "poor_foot_position"],
+          "correction": ["cue_knees_out", "widen_stance", "address_hip_abductor_weakness", "check_foot_flare"],
+          "severity": "high",
+          "video_indicators": ["knees_track_inside_toes", "visible_inward_knee_collapse"]
+        },
+        {
+          "id": "sq_fault_2",
+          "fault": "Good morning ascent",
+          "description": "Hips rise faster than shoulders out of the hole, converting squat into a back-loaded good morning",
+          "cause": ["quad_weakness", "weight_too_heavy", "poor_brace", "bar_position_too_high_for_mobility"],
+          "correction": ["pause_squats_to_build_hole_strength", "reduce_load", "cue_chest_up_on_ascent"],
+          "severity": "high",
+          "video_indicators": ["hip_angle_opens_faster_than_torso_rises", "bar_path_shoots_forward"]
+        },
+        {
+          "id": "sq_fault_3",
+          "fault": "Butt wink",
+          "description": "Posterior pelvic tilt at bottom — lower back rounds under the bar",
+          "cause": ["hip_flexor_tightness", "ankle_dorsiflexion_limitation", "excessive_depth_beyond_mobility"],
+          "correction": ["address_ankle_mobility", "reduce_depth_to_above_fault_threshold", "hip_flexor_stretching"],
+          "severity": "medium",
+          "video_indicators": ["lumbar_rounding_visible_at_bottom", "glutes_tuck_under"]
+        },
+        {
+          "id": "sq_fault_4",
+          "fault": "Shallow depth",
+          "description": "Hip crease does not reach parallel — results in red light in competition",
+          "cause": ["mobility_limitation", "intentional_or_habitual", "heavy_load_avoidance"],
+          "correction": ["use_box_squat_to_depth", "address_mobility", "video_feedback"],
+          "severity": "high_for_competition",
+          "video_indicators": ["hip_crease_above_patella_at_turnaround"]
+        },
+        {
+          "id": "sq_fault_5",
+          "fault": "Forward torso collapse",
+          "description": "Excessive forward lean beyond what bar position warrants, usually with upper back rounding",
+          "cause": ["weak_upper_back", "poor_brace", "bar_position_instability"],
+          "correction": ["upper_back_strengthening", "cue_elbows_under_bar", "practice_bracing"],
+          "severity": "high",
+          "video_indicators": ["bar_drifts_forward", "upper_back_rounds_during_descent"]
+        }
+      ],
+      "bar_path_analysis": {
+        "ideal": "Vertical bar path over midfoot from side view. Minimal lateral deviation from rear view.",
+        "red_flags": ["bar_drifts_forward_on_descent", "bar_drifts_back_at_lockout", "asymmetrical_bar_tilt_from_rear"]
+      }
+    },
+    "deadlift": {
+      "name": "Conventional Deadlift",
+      "variants": ["conventional", "sumo"],
+      "phases": {
+        "setup": {
+          "description": "Starting position with bar on floor",
+          "checkpoints": [
+            {
+              "id": "dl_setup_1",
+              "cue": "Bar position",
+              "standard": "Bar over midfoot — approximately 1 inch from shins. Not against shins, not far from body.",
+              "video_cues": ["bar_over_midfoot", "no_bar_too_far_from_body"]
+            },
+            {
+              "id": "dl_setup_2",
+              "cue": "Hip position",
+              "standard": "Hips set at height where back angle is optimal — not a squat, not a stiff-leg. Shins should be near vertical or slightly forward.",
+              "competitive_note": "Hip height at setup is individual — determined by limb lengths. Taller/longer-femur lifters will have a more horizontal back angle.",
+              "video_cues": ["shins_near_vertical", "hips_not_too_high_or_too_low", "no_squat_stance_setup"]
+            },
+            {
+              "id": "dl_setup_3",
+              "cue": "Lat engagement",
+              "standard": "Lats pulled down and back before pulling. Cue: 'protect your armpits' or 'bend the bar around your legs'. This prevents bar drift from body.",
+              "video_cues": ["arms_vertical_at_setup", "no_slack_in_upper_back"]
+            },
+            {
+              "id": "dl_setup_4",
+              "cue": "Grip",
+              "standard": "Double overhand, mixed grip, or hook grip. Hands just outside legs. Bar in fingers, not palms.",
+              "competitive_note": "Hook grip preferred for competitive lifters for symmetrical pull. Mixed grip acceptable but creates rotational force.",
+              "video_cues": ["grip_width_just_outside_legs", "no_excessively_wide_grip"]
+            },
+            {
+              "id": "dl_setup_5",
+              "cue": "Back position",
+              "standard": "Neutral spine — natural lumbar curve maintained. Not hyper-extended, not rounded. Upper back braced and tight.",
+              "video_cues": ["neutral_lumbar_at_setup", "no_rounded_upper_back_pre_pull"]
+            }
+          ]
+        },
+        "pull_initiation": {
+          "description": "Taking slack out and beginning the pull from floor",
+          "checkpoints": [
+            {
+              "id": "dl_init_1",
+              "cue": "Taking slack out of the bar",
+              "standard": "Apply gradual tension to bar before full pull. Bar bends slightly before plates leave floor. Prevents jerking the weight off the floor.",
+              "video_cues": ["smooth_bar_liftoff", "no_jerk_off_floor", "bar_bends_before_plates_lift"]
+            },
+            {
+              "id": "dl_init_2",
+              "cue": "Leg drive vs pulling",
+              "standard": "Cue is 'push the floor away' — not 'pull the bar up'. Initiates as a leg press, transitioning to hip hinge as bar passes knees.",
+              "video_cues": ["hips_and_bar_rise_together_initially", "no_hips_shooting_up_immediately"]
+            }
+          ]
+        },
+        "ascent": {
+          "description": "Full pull from floor to lockout",
+          "checkpoints": [
+            {
+              "id": "dl_asc_1",
+              "cue": "Bar path",
+              "standard": "Bar travels in a straight vertical line. Bar stays close to body — drags up shins and thighs if necessary.",
+              "video_cues": ["bar_stays_close_to_legs", "no_bar_drift_away_from_body", "vertical_bar_path"]
+            },
+            {
+              "id": "dl_asc_2",
+              "cue": "Hip hinge transition",
+              "standard": "As bar passes knees, hips drive forward. Transition from leg press to hip extension. Back angle should remain constant until bar passes knees.",
+              "video_cues": ["back_angle_constant_until_knees", "hips_drive_forward_at_knee_height"]
+            },
+            {
+              "id": "dl_asc_3",
+              "cue": "Head and neck position",
+              "standard": "Neutral neck — not cranked up or buried in chest. Eyes forward or slightly down. Neutral spine includes cervical spine.",
+              "video_cues": ["neutral_neck_throughout", "no_chin_jut", "no_neck_hyperextension"]
+            }
+          ]
+        },
+        "lockout": {
+          "description": "Terminal position at top of lift",
+          "checkpoints": [
+            {
+              "id": "dl_lock_1",
+              "cue": "Full hip extension",
+              "standard": "Hips fully extended — stand tall. Glutes contracted. No hyperextension of lumbar (leaning back excessively).",
+              "competitive_note": "Hitching (using thighs to re-shelf bar on ascent) is an IPF/USAPL rules violation. Clean continuous pull required.",
+              "video_cues": ["full_hip_extension", "no_lumbar_hyperextension_at_lockout", "no_hitching"]
+            },
+            {
+              "id": "dl_lock_2",
+              "cue": "Shoulder position",
+              "standard": "Shoulders directly over or slightly behind bar at lockout. Not rolled forward.",
+              "video_cues": ["shoulders_over_bar", "no_forward_shoulder_roll_at_lockout"]
+            }
+          ]
+        },
+        "descent": {
+          "description": "Controlled lowering back to floor",
+          "checkpoints": [
+            {
+              "id": "dl_desc_1",
+              "cue": "Hinge first",
+              "standard": "Push hips back first as bar descends past hips. Then bend knees as bar passes knees. Reverse of ascent.",
+              "video_cues": ["controlled_descent", "hips_hinge_before_knees_bend"]
+            }
+          ]
+        }
+      },
+      "common_faults": [
+        {
+          "id": "dl_fault_1",
+          "fault": "Hips shooting up on initiation",
+          "description": "Hips rise faster than the bar — lifter transitions immediately to a stiff-leg position, losing leg drive",
+          "cause": ["hip_set_too_low_at_setup", "quad_weakness", "attempting_to_pull_with_back"],
+          "correction": ["reset_hip_height_at_setup", "cue_push_floor_away", "pause_deadlifts"],
+          "severity": "high",
+          "video_indicators": ["hips_rise_before_bar_leaves_floor", "back_angle_becomes_more_horizontal_immediately"]
+        },
+        {
+          "id": "dl_fault_2",
+          "fault": "Bar drift from body",
+          "description": "Bar swings away from legs during pull, increasing moment arm on lower back dramatically",
+          "cause": ["poor_lat_engagement", "bar_starts_too_far_from_shins", "pulling_with_arms"],
+          "correction": ["cue_lats_down_and_back", "drag_bar_up_legs", "setup_bar_over_midfoot"],
+          "severity": "high",
+          "video_indicators": ["bar_path_curves_away_from_body", "gap_between_bar_and_legs"]
+        },
+        {
+          "id": "dl_fault_3",
+          "fault": "Lumbar flexion under load",
+          "description": "Lower back rounds during pull — often at initiation or at sticking point",
+          "cause": ["weight_too_heavy", "poor_bracing", "hamstring_inflexibility_causing_hip_drop"],
+          "correction": ["reduce_load", "improve_bracing_protocol", "romanian_deadlift_for_hamstring_strength"],
+          "severity": "high",
+          "video_indicators": ["lumbar_rounds_during_pull", "posterior_pelvic_tilt_visible_from_side"]
+        },
+        {
+          "id": "dl_fault_4",
+          "fault": "Hyperextension at lockout",
+          "description": "Lifter leans back excessively at top, creating lumbar hyperextension",
+          "cause": ["compensation_for_missed_cue", "habit", "misunderstanding_of_lockout_position"],
+          "correction": ["cue_stand_tall_not_lean_back", "glute_squeeze_without_lumbar_extension"],
+          "severity": "medium",
+          "video_indicators": ["excessive_backward_lean_at_top", "lumbar_hyperextension_visible"]
+        },
+        {
+          "id": "dl_fault_5",
+          "fault": "Hitching",
+          "description": "Bar stalls mid-thigh and lifter re-shelves it on thighs to complete lockout",
+          "cause": ["weight_too_heavy", "fatigue", "poor_hip_drive"],
+          "correction": ["reduce_load", "improve_hip_extension_strength", "rack_pulls_at_mid_thigh"],
+          "severity": "high_for_competition",
+          "video_indicators": ["bar_pauses_at_thigh", "upward_hip_movement_to_boost_bar", "bar_slides_on_thigh_in_two_motions"]
+        }
+      ],
+      "bar_path_analysis": {
+        "ideal": "Perfectly vertical from side view. Bar stays within 1-2cm of legs throughout pull.",
+        "red_flags": ["bar_swings_away_from_body", "s_curve_bar_path", "bar_stalls_at_knee_or_thigh"]
+      }
+    },
+    "bench_press": {
+      "name": "Barbell Bench Press",
+      "variants": ["flat", "competition_pause"],
+      "phases": {
+        "setup": {
+          "description": "Body position, arch, and grip on the bench",
+          "checkpoints": [
+            {
+              "id": "bp_setup_1",
+              "cue": "Grip width",
+              "standard": "Typically 1.5-2x shoulder width. Wrists directly above bar at the bottom. IPF rule: no wider than 81cm ring marks on bar.",
+              "competitive_note": "Wider grip shortens ROM but increases pec demand and reduces wrist/elbow stress. Individual optimization required.",
+              "video_cues": ["wrists_stacked_over_bar_at_bottom", "grip_within_ring_marks"]
+            },
+            {
+              "id": "bp_setup_2",
+              "cue": "Arch and back tightness",
+              "standard": "Natural arch in lower back. Scapulae retracted and depressed — create a tight platform on the bench. This shortens pressing distance and creates stability.",
+              "competitive_note": "Large arch is legal in most federations and mechanically beneficial. Upper back contact with bench is required in IPF.",
+              "video_cues": ["scapulae_retracted_and_depressed", "upper_back_flat_on_bench", "butt_on_bench"]
+            },
+            {
+              "id": "bp_setup_3",
+              "cue": "Foot position",
+              "standard": "Feet flat on floor (preferred for stability and leg drive) or on bench. Leg drive transfers force from floor through body into bar.",
+              "competitive_note": "Feet flat and actively driving creates legal and effective leg drive. Feet on bench eliminates this advantage.",
+              "video_cues": ["feet_flat_or_on_bench", "no_feet_floating_in_air"]
+            },
+            {
+              "id": "bp_setup_4",
+              "cue": "Bar path over eyes at unrack",
+              "standard": "Bar should be racked such that at unrack it travels slightly back over the shoulder joint — not forward. Wrist over elbow in starting position.",
+              "video_cues": ["bar_over_lower_chest_or_nipple_line_at_start", "not_over_face_at_start"]
+            }
+          ]
+        },
+        "descent": {
+          "description": "Lowering the bar from arms extended to chest",
+          "checkpoints": [
+            {
+              "id": "bp_desc_1",
+              "cue": "Elbow angle",
+              "standard": "Elbows at 45-75 degrees from torso — not flared to 90 degrees (shoulder injury risk), not tucked completely (reduces pec involvement).",
+              "competitive_note": "Optimal angle is individual based on limb length and torso thickness. Generally closer to 45 degrees for bigger arches and wider grips.",
+              "video_cues": ["elbows_not_fully_flared", "forearms_vertical_at_touch_point"]
+            },
+            {
+              "id": "bp_desc_2",
+              "cue": "Touch point",
+              "standard": "Bar touches lower chest — typically nipple line or slightly below depending on arch. Controlled touch, not bouncing.",
+              "competitive_note": "IPF requires a motionless pause on chest before press command. No bounce.",
+              "video_cues": ["bar_touches_lower_chest", "no_bar_touch_at_collar_bone", "controlled_descent"]
+            },
+            {
+              "id": "bp_desc_3",
+              "cue": "Wrist position",
+              "standard": "Wrists neutral — not bent back. Bar in palm with slight wrist extension acceptable if controlled. Excessively bent wrists indicate bar too high in hand.",
+              "video_cues": ["wrists_neutral_or_slightly_extended", "no_excessive_wrist_bend"]
+            }
+          ]
+        },
+        "pause": {
+          "description": "Stationary bar on chest (competition standard)",
+          "checkpoints": [
+            {
+              "id": "bp_pause_1",
+              "cue": "No downward movement during pause",
+              "standard": "Bar remains motionless on chest. No sinking, no bouncing, no re-racking. Pause until 'press' command in competition.",
+              "video_cues": ["bar_stationary_on_chest", "no_bar_sinking_during_pause", "no_early_press"]
+            }
+          ]
+        },
+        "press": {
+          "description": "Drive phase from chest back to lockout",
+          "checkpoints": [
+            {
+              "id": "bp_press_1",
+              "cue": "Bar path on press",
+              "standard": "Bar travels in a slight arc — back and slightly up toward the face. Not straight up (inefficient) and not forward toward feet.",
+              "video_cues": ["bar_arcs_back_toward_rack", "not_straight_vertical_press"]
+            },
+            {
+              "id": "bp_press_2",
+              "cue": "Leg drive",
+              "standard": "Drive through legs into the floor as bar is pressed — transfers force through the arch and into the bar. Butt must remain on bench.",
+              "competitive_note": "Leg drive can add 10-20% to competition bench. Common neglected technique element in intermediate lifters.",
+              "video_cues": ["legs_drive_into_floor_during_press", "butt_stays_on_bench"]
+            },
+            {
+              "id": "bp_press_3",
+              "cue": "Lockout",
+              "standard": "Full elbow extension at top. Bar over shoulder joint at lockout. Elbows not hyperextended.",
+              "video_cues": ["full_elbow_extension", "bar_over_shoulders_at_lockout"]
+            }
+          ]
+        }
+      },
+      "common_faults": [
+        {
+          "id": "bp_fault_1",
+          "fault": "Elbow flare",
+          "description": "Elbows flare to 90 degrees from torso — increases anterior shoulder impingement risk",
+          "cause": ["grip_too_wide", "chest_muscle_dominance", "unfamiliarity_with_tuck_cue"],
+          "correction": ["narrow_grip_slightly", "cue_elbows_45_degrees", "build_tricep_strength"],
+          "severity": "high",
+          "video_indicators": ["elbows_perpendicular_to_torso_from_above", "upper_arm_parallel_to_floor"]
+        },
+        {
+          "id": "bp_fault_2",
+          "fault": "Bar bounce off chest",
+          "description": "Lifter uses momentum from bounce to complete press — illegal in competition and reduces training stimulus",
+          "cause": ["weight_too_heavy", "no_pause_practice", "habit"],
+          "correction": ["pause_bench_press_training", "reduce_load", "competition_command_simulation"],
+          "severity": "high_for_competition",
+          "video_indicators": ["bar_visibly_bounces_at_chest", "rapid_reversal_at_touch_point"]
+        },
+        {
+          "id": "bp_fault_3",
+          "fault": "Butt lift",
+          "description": "Hips leave bench during press — a rules violation in all major federations",
+          "cause": ["weight_too_heavy", "excessive_leg_drive_without_control", "poor_setup"],
+          "correction": ["reduce_load", "practice_leg_drive_without_hip_movement", "widen_foot_position_for_stability"],
+          "severity": "high_for_competition",
+          "video_indicators": ["hips_visibly_lift_off_bench_during_press"]
+        },
+        {
+          "id": "bp_fault_4",
+          "fault": "Uneven bar",
+          "description": "Bar tilts to one side during press — indicates left/right strength imbalance or inconsistent setup",
+          "cause": ["strength_asymmetry", "grip_asymmetry", "uneven_setup"],
+          "correction": ["unilateral_work_to_address_imbalance", "check_grip_symmetry_pre_lift", "use_ring_marks_as_reference"],
+          "severity": "medium",
+          "video_indicators": ["bar_tilts_during_press_from_front_view", "one_side_presses_faster"]
+        },
+        {
+          "id": "bp_fault_5",
+          "fault": "Press out (soft lockout)",
+          "description": "Elbows not fully locked at completion — red light in competition",
+          "cause": ["tricep_weakness", "fatigue", "unfamiliarity_with_lockout_standard"],
+          "correction": ["close_grip_bench_for_tricep_strength", "lockout_focus_in_training", "full_extension_habit"],
+          "severity": "high_for_competition",
+          "video_indicators": ["elbows_not_fully_extended_at_top", "slight_bend_remains_at_lockout"]
+        }
+      ],
+      "bar_path_analysis": {
+        "ideal": "Slight J-curve from side — descent toward lower chest, ascent arcing back toward shoulder joint.",
+        "red_flags": ["straight_vertical_bar_path", "bar_drifts_toward_face", "bar_drifts_toward_feet", "bar_stalls_at_sticking_point_mid_press"]
+      }
+    },
+    "romanian_deadlift": {
+      "name": "Romanian Deadlift (RDL)",
+      "variants": ["barbell", "dumbbell"],
+      "context": "Accessory lift for posterior chain development. Key hamstring and glute developer. Critical for improving conventional and sumo deadlift strength.",
+      "phases": {
+        "setup": {
+          "description": "Starting from standing with bar in hands",
+          "checkpoints": [
+            {
+              "id": "rdl_setup_1",
+              "cue": "Starting position",
+              "standard": "Begin standing with bar at hip crease. Feet hip-width. Slight bend in knees — this knee angle is maintained throughout, not flexed further.",
+              "video_cues": ["standing_tall_at_start", "soft_knee_at_setup", "bar_at_hip_crease"]
+            },
+            {
+              "id": "rdl_setup_2",
+              "cue": "Grip and lat engagement",
+              "standard": "Overhand grip just outside hips. Lats engaged to keep bar close to body throughout. Shoulder blades retracted.",
+              "video_cues": ["bar_close_to_body", "no_rounded_upper_back_at_start"]
+            }
+          ]
+        },
+        "descent": {
+          "description": "Hip hinge lowering bar toward floor",
+          "checkpoints": [
+            {
+              "id": "rdl_desc_1",
+              "cue": "Hip hinge — not a squat",
+              "standard": "Hips push back, not down. Knee angle stays constant (slight bend only). This is the critical distinction from a deadlift.",
+              "video_cues": ["hips_move_back_not_down", "knees_do_not_flex_significantly_during_descent"]
+            },
+            {
+              "id": "rdl_desc_2",
+              "cue": "Bar path",
+              "standard": "Bar stays in contact with or within 1-2cm of legs throughout descent. Drags down thighs toward knees.",
+              "video_cues": ["bar_close_to_legs", "no_bar_swing_away_from_body"]
+            },
+            {
+              "id": "rdl_desc_3",
+              "cue": "Hamstring stretch — the target sensation",
+              "standard": "Descend until strong hamstring tension is felt. This is the limiting factor — not touching the floor. Depth varies by individual hamstring flexibility.",
+              "competitive_note": "RDL depth should be limited by hamstring tension, not ego. Forcing past the point of tension leads to lumbar compensation.",
+              "video_cues": ["descent_stops_at_hamstring_limit", "no_lumbar_rounding_at_bottom"]
+            },
+            {
+              "id": "rdl_desc_4",
+              "cue": "Spine position",
+              "standard": "Neutral lumbar throughout. Natural lordotic curve maintained. If the back rounds, the descent has gone too far for current flexibility.",
+              "video_cues": ["neutral_lumbar_throughout_descent", "no_posterior_pelvic_tilt_during_descent"]
+            }
+          ]
+        },
+        "ascent": {
+          "description": "Drive phase back to standing",
+          "checkpoints": [
+            {
+              "id": "rdl_asc_1",
+              "cue": "Hip drive",
+              "standard": "Drive hips forward to return to standing. Glutes contract to complete extension. Not a pull with the lower back.",
+              "video_cues": ["hips_drive_forward_on_ascent", "glute_activation_at_top"]
+            },
+            {
+              "id": "rdl_asc_2",
+              "cue": "Lockout",
+              "standard": "Full hip extension at top. Neutral spine. Glutes contracted. No hyperextension.",
+              "video_cues": ["full_hip_extension", "no_lumbar_hyperextension", "tall_standing_position"]
+            }
+          ]
+        }
+      },
+      "common_faults": [
+        {
+          "id": "rdl_fault_1",
+          "fault": "Squatting the RDL",
+          "description": "Knees flex significantly during descent, converting hip hinge into a squat pattern",
+          "cause": ["pattern_confusion", "anterior_dominance", "mobility_compensation"],
+          "correction": ["cue_hips_back_not_down", "wall_RDL_drill_to_learn_hinge_pattern", "keep_shins_vertical"],
+          "severity": "high",
+          "video_indicators": ["knees_flex_significantly_during_descent", "shins_angle_forward_like_squat"]
+        },
+        {
+          "id": "rdl_fault_2",
+          "fault": "Bar drift from body",
+          "description": "Bar swings away from legs during descent — loads lumbar spinae disproportionately",
+          "cause": ["poor_lat_engagement", "allowing_arms_to_pull_forward"],
+          "correction": ["cue_drag_bar_down_legs", "engage_lats_before_descent", "use_lighter_load"],
+          "severity": "high",
+          "video_indicators": ["visible_gap_between_bar_and_legs", "bar_swings_forward_on_descent"]
+        },
+        {
+          "id": "rdl_fault_3",
+          "fault": "Forcing depth past hamstring limit",
+          "description": "Lifter continues descent past point of hamstring tension, compensating with lumbar flexion",
+          "cause": ["targeting_floor_rather_than_tension", "flexibility_limitation_ignored"],
+          "correction": ["stop_at_tension_not_at_floor", "improve_hamstring_flexibility_over_time"],
+          "severity": "high",
+          "video_indicators": ["lower_back_rounds_at_bottom", "posterior_pelvic_tilt_at_deepest_point"]
+        },
+        {
+          "id": "rdl_fault_4",
+          "fault": "Hyperextension at top",
+          "description": "Lifter leans back beyond neutral at top of movement",
+          "cause": ["overcompensation_cue", "misunderstanding_of_hip_extension"],
+          "correction": ["cue_stand_tall_not_lean_back", "glute_squeeze_without_spinal_extension"],
+          "severity": "medium",
+          "video_indicators": ["excessive_backward_lean_at_standing_position"]
+        }
+      ],
+      "bar_path_analysis": {
+        "ideal": "Bar stays within 1-2cm of legs for entire movement. Side view shows straight vertical path as bar descends.",
+        "red_flags": ["bar_arcs_away_from_body", "bar_path_is_not_vertical_from_side"]
+      }
+    }
+  },
+  "video_analysis_framework": {
+    "camera_angles": {
+      "side_view": {
+        "best_for": ["bar_path", "torso_angle", "hip_hinge_quality", "depth", "bar_drift", "lockout_position"],
+        "setup": "Camera at hip height, perpendicular to lifter"
+      },
+      "front_view": {
+        "best_for": ["knee_tracking", "bar_tilt", "symmetry", "stance_width", "foot_position"],
+        "setup": "Camera at hip height, directly in front of lifter"
+      },
+      "rear_view": {
+        "best_for": ["knee_tracking", "bar_tilt", "hip_shift", "back_rounding_visibility"],
+        "setup": "Camera at hip height, directly behind lifter"
+      }
+    },
+    "key_frames_to_analyze": {
+      "squat": ["setup_and_walkout", "descent_start", "parallel_depth", "bottom_position", "ascent_sticking_point", "lockout"],
+      "deadlift": ["setup_position", "slack_out_moment", "bar_off_floor", "bar_at_knee", "bar_at_thigh", "lockout"],
+      "bench_press": ["unrack", "descent_start", "touch_point", "pause_complete", "sticking_point", "lockout"],
+      "romanian_deadlift": ["setup", "hinge_initiation", "mid_descent", "deepest_point", "ascent_midpoint", "lockout"]
+    },
+    "joint_angles_to_track": {
+      "squat": {
+        "hip_angle_at_bottom": {"ideal_range_degrees": [60, 90], "measured": "between_torso_and_femur"},
+        "knee_angle_at_bottom": {"ideal_range_degrees": [70, 100], "measured": "between_femur_and_tibia"},
+        "ankle_dorsiflexion": {"ideal_range_degrees": [20, 40], "measured": "between_tibia_and_foot"}
+      },
+      "deadlift": {
+        "hip_angle_at_setup": {"ideal_range_degrees": [30, 60], "measured": "between_torso_and_femur"},
+        "back_angle_at_setup": {"ideal_range_degrees": [30, 50], "measured": "between_torso_and_floor"},
+        "shin_angle_at_setup": {"ideal_range_degrees": [75, 90], "measured": "between_tibia_and_floor"}
+      },
+      "bench_press": {
+        "elbow_angle_at_touch": {"ideal_range_degrees": [45, 75], "measured": "elbow_flare_from_torso"},
+        "wrist_angle": {"ideal_range_degrees": [160, 180], "note": "neutral_to_slight_extension"}
+      },
+      "romanian_deadlift": {
+        "hip_angle_at_deepest": {"ideal_range_degrees": [40, 70], "measured": "between_torso_and_femur"},
+        "knee_angle_throughout": {"ideal_range_degrees": [150, 170], "note": "should_remain_nearly_constant"}
+      }
+    }
+  },
+  "competition_rules_reference": {
+    "ipf_squat": [
+      "Bar loaded with at least 2 collars",
+      "Wait for 'squat' command",
+      "Hip crease must descend below top of knee",
+      "Return to full upright position",
+      "Wait for 'rack' command",
+      "No stepping forward or backward after unracking — side steps allowed"
+    ],
+    "ipf_deadlift": [
+      "Bar loaded with at least 2 collars",
+      "Lift must be one continuous movement — no hitching",
+      "Knees and hips must be in line at lockout",
+      "No downward movement of bar before lockout",
+      "Wait for 'down' command before lowering",
+      "No bouncing from floor on successive reps in training context"
+    ],
+    "ipf_bench_press": [
+      "Wait for 'start' command after unracking",
+      "Pause bar motionless on chest",
+      "Wait for 'press' command",
+      "Even extension of both arms to lockout",
+      "Wait for 'rack' command",
+      "Butt must remain on bench throughout",
+      "Feet must remain in contact with floor or blocks"
+    ]
+  }
+}
