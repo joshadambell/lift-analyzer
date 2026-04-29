@@ -128,8 +128,12 @@ export function segmentReps(
           const repEnd = i;
           const totalFrames = repEnd - repStart;
           const depthChange = smoothed[bottomFrame] - smoothed[repStart];
+          // Require the signal to have returned at least halfway from its peak.
+          // This rejects false "stand up after set" reps where the signal peaks
+          // (at lockout) and then barely moves before the FSM resets.
+          const returnDepth = smoothed[bottomFrame] - smoothed[repEnd];
 
-          if (totalFrames >= minRepFrames && depthChange >= minDepthThreshold) {
+          if (totalFrames >= minRepFrames && depthChange >= minDepthThreshold && returnDepth >= minDepthThreshold * 0.5) {
             reps.push({ startFrame: repStart, bottomFrame, endFrame: repEnd });
           }
 
@@ -146,7 +150,8 @@ export function segmentReps(
     const repEnd = smoothed.length - 1;
     const totalFrames = repEnd - repStart;
     const depthChange = smoothed[bottomFrame] - smoothed[repStart];
-    if (totalFrames >= minRepFrames && depthChange >= minDepthThreshold) {
+    const returnDepth = smoothed[bottomFrame] - smoothed[repEnd];
+    if (totalFrames >= minRepFrames && depthChange >= minDepthThreshold && returnDepth >= minDepthThreshold * 0.5) {
       reps.push({ startFrame: repStart, bottomFrame, endFrame: repEnd });
     }
   }

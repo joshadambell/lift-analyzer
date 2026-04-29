@@ -112,9 +112,11 @@ export async function extractPosesFromVideo(
 
   if (useRvfc) {
     // Fast path: decode frames in playback order, no per-frame seek overhead.
-    // At 16× speed a 60s video takes ~4s of wall time; pose inference runs
-    // synchronously in the callback, gating the decoder naturally.
-    video.playbackRate = 16;
+    // 2× is the sweet spot: fast enough to halve wall time, slow enough that
+    // the browser decodes every frame (not just H.264 keyframes). At 16× most
+    // browsers skip inter-frames and rvfc only fires ~1/sec — producing ~15
+    // frames for a 12-second video instead of ~180.
+    video.playbackRate = 2;
 
     let lastSampledTime = -SAMPLE_INTERVAL;
     let frameIndex = 0;
