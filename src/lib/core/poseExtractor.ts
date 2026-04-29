@@ -84,6 +84,9 @@ async function ensurePoseLandmarker() {
   return poseLandmarker;
 }
 
+// Minimal type for the VideoFrameCallbackMetadata parameter
+interface VideoFrameMetadata { mediaTime: number; }
+
 export async function extractPosesFromVideo(
   videoFile: File,
   onProgress?: (pct: number) => void
@@ -101,63 +104,101 @@ export async function extractPosesFromVideo(
 
   const landmarker = await ensurePoseLandmarker();
   const frames: PoseFrame[] = [];
-  const FPS_SAMPLE = 15; // sample at 15fps for performance
+  const FPS_SAMPLE = 15;
+  const SAMPLE_INTERVAL = 1 / FPS_SAMPLE;
   const duration = video.duration;
-  const step = 1 / FPS_SAMPLE;
 
-  let frameIndex = 0;
-  let currentTime = 0;
+  const useRvfc = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
 
-  video.currentTime = 0;
-  await seekTo(video, 0);
+  if (useRvfc) {
+    // Fast path: decode frames in playback order, no per-frame seek overhead.
+    // At 16× speed a 60s video takes ~4s of wall time; pose inference runs
+    // synchronously in the callback, gating the decoder naturally.
+    video.playbackRate = 16;
 
-  while (currentTime <= duration) {
-    await seekTo(video, currentTime);
+    let lastSampledTime = -SAMPLE_INTERVAL;
+    let frameIndex = 0;
 
-    const timestampMs = currentTime * 1000;
-    // MediaPipe sees offset+videoTime to satisfy monotonic-clock requirement
-    // across multiple analyses on the same landmarker instance.
-    const result = landmarker.detectForVideo(video, mediaPipeTimestampOffsetMs + timestampMs);
+    await new Promise<void>((resolve, reject) => {
+      const onFrame = (_now: DOMHighResTimeStamp, meta: VideoFrameMetadata) => {
+        const mediaTime = meta.mediaTime;
 
-    if (result.landmarks.length > 0) {
-      const landmarks = result.landmarks[0];
-      const worldLandmarks = result.worldLandmarks?.[0];
+        if (mediaTime - lastSampledTime >= SAMPLE_INTERVAL) {
+          lastSampledTime = mediaTime;
+          const timestampMs = mediaTime * 1000;
+          const result = landmarker.detectForVideo(video, mediaPipeTimestampOffsetMs + timestampMs);
+          appendFrame(result, timestampMs, frameIndex++, frames);
+          onProgress?.(Math.min(99, (mediaTime / duration) * 100));
+        }
 
-      const keypoints: Record<string, Keypoint> = {};
-      for (let i = 0; i < landmarks.length; i++) {
-        const name = LANDMARK_NAMES[i] ?? `landmark_${i}`;
-        keypoints[name] = {
-          x: landmarks[i].x,
-          y: landmarks[i].y,
-          z: worldLandmarks?.[i]?.z ?? landmarks[i].z ?? 0,
-          visibility: landmarks[i].visibility ?? 0,
-          name,
-        };
-      }
+        if (mediaTime < duration - SAMPLE_INTERVAL * 0.5) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (video as any).requestVideoFrameCallback(onFrame);
+        } else {
+          resolve();
+        }
+      };
 
-      const confidence =
-        KEY_VISIBILITY_LANDMARKS.reduce(
-          (sum, n) => sum + (keypoints[n]?.visibility ?? 0),
-          0
-        ) / KEY_VISIBILITY_LANDMARKS.length;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (video as any).requestVideoFrameCallback(onFrame);
+      video.play().catch(reject);
+    });
 
-      frames.push({ timestamp: timestampMs, frameIndex, keypoints, confidence });
+    video.pause();
+  } else {
+    // Fallback: seek to each sample point (slower but universally supported).
+    let frameIndex = 0;
+    let currentTime = 0;
+    const step = SAMPLE_INTERVAL;
+
+    video.currentTime = 0;
+    await seekTo(video, 0);
+
+    while (currentTime <= duration) {
+      await seekTo(video, currentTime);
+      const timestampMs = currentTime * 1000;
+      const result = landmarker.detectForVideo(video, mediaPipeTimestampOffsetMs + timestampMs);
+      appendFrame(result, timestampMs, frameIndex++, frames);
+      currentTime += step;
+      onProgress?.(Math.min(99, (currentTime / duration) * 100));
     }
-
-    frameIndex++;
-    currentTime += step;
-    onProgress?.(Math.min(99, (currentTime / duration) * 100));
   }
 
   URL.revokeObjectURL(url);
-
-  // Bump the MediaPipe timestamp offset past this video's last timestamp so
-  // the next analysis starts in valid (still-increasing) timestamp territory.
-  // +1000ms buffer to be safe against any interleaved calls.
   mediaPipeTimestampOffsetMs += duration * 1000 + 1000;
-
   onProgress?.(100);
   return frames;
+}
+
+function appendFrame(
+  result: { landmarks: { x: number; y: number; z?: number; visibility?: number }[][]; worldLandmarks?: { z?: number }[][] },
+  timestampMs: number,
+  frameIndex: number,
+  frames: PoseFrame[],
+): void {
+  if (result.landmarks.length === 0) return;
+  const landmarks = result.landmarks[0];
+  const worldLandmarks = result.worldLandmarks?.[0];
+
+  const keypoints: Record<string, Keypoint> = {};
+  for (let i = 0; i < landmarks.length; i++) {
+    const name = LANDMARK_NAMES[i] ?? `landmark_${i}`;
+    keypoints[name] = {
+      x: landmarks[i].x,
+      y: landmarks[i].y,
+      z: worldLandmarks?.[i]?.z ?? landmarks[i].z ?? 0,
+      visibility: landmarks[i].visibility ?? 0,
+      name,
+    };
+  }
+
+  const confidence =
+    KEY_VISIBILITY_LANDMARKS.reduce(
+      (sum, n) => sum + (keypoints[n]?.visibility ?? 0),
+      0
+    ) / KEY_VISIBILITY_LANDMARKS.length;
+
+  frames.push({ timestamp: timestampMs, frameIndex, keypoints, confidence });
 }
 
 function seekTo(video: HTMLVideoElement, time: number): Promise<void> {

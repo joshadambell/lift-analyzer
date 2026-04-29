@@ -21,20 +21,9 @@ import type { RepBounds } from "../../core/repSegmenter";
 import {
   getKp, dominantSide, midpoint, angleDeg, smoothMovingAverage, mean,
 } from "../../core/geometry";
-import { getFault } from "../../knowledge";
+import { type CueSet, unknownResult, finalize, makeCuesFromFault } from "../../core/ruleHelpers";
 
-interface CueSet { passed: string; borderline: string; failed: string; }
-
-function cuesFromFault(faultId: string, passedCue: string, borderlineCue?: string): CueSet {
-  const f = getFault("bench_press", faultId);
-  if (!f) return { passed: passedCue, borderline: passedCue, failed: "Form fault detected." };
-  const corrections = f.correction.map((c) => c.replace(/_/g, " ")).join("; ");
-  return {
-    passed: passedCue,
-    borderline: borderlineCue ?? `Borderline ${f.fault.toLowerCase()}.`,
-    failed: `${f.description}. Fix: ${corrections}.`,
-  };
-}
+const cuesFromFault = makeCuesFromFault("bench_press");
 
 export const BENCH_RULE_CONFIGS = {
   pause: {
@@ -198,17 +187,7 @@ export function checkBarPath(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function unknown(ruleId: string, ruleName: string, cue: string): RuleResult {
-  return { ruleId, ruleName, verdict: "unknown", cue, confidence: 0 };
-}
-
-function finalize(
-  ruleId: string, ruleName: string, verdict: RuleVerdict, cues: CueSet,
-  value: number, threshold: number, confidence: number
-): RuleResult {
-  const cue = verdict === "passed" ? cues.passed : verdict === "borderline" ? cues.borderline : cues.failed;
-  return { ruleId, ruleName, verdict, value, threshold, cue, confidence };
-}
+const unknown = unknownResult;
 
 export function computeBarPathDriftPercent(
   frames: PoseFrame[], bounds: RepBounds, torsoLen: number

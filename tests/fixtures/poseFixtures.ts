@@ -1,6 +1,6 @@
 /**
  * Synthetic pose data generators for testing.
- * Creates PoseFrame arrays that simulate specific squat scenarios
+ * Creates PoseFrame arrays that simulate specific lift scenarios
  * without requiring real video files.
  *
  * Coordinate system: normalized [0,1], Y increases downward (MediaPipe convention).
@@ -182,4 +182,289 @@ export function generateForwardKneeDriftVideo(): PoseFrame[] {
     kneeForwardDrift: true,
   });
   return [...walkout, ...rep1];
+}
+
+// ─── Deadlift fixtures ────────────────────────────────────────────────────────
+
+/**
+ * Deadlift frame: lifter faces right (foot_index.x > heel.x so facingSign returns +1).
+ * Signal: invertedWristYSignal = -wristY. The "bar on floor" position has high wristY
+ * (wrist near ankles) which becomes the low-signal "standing" baseline for the FSM.
+ */
+function buildDeadliftFrame(
+  shoulderY: number,
+  hipY: number,
+  wristY: number,
+  lean: number, // shoulder X offset from hip (backward lean > 0)
+  timestampMs: number,
+  frameIndex: number,
+): PoseFrame {
+  const hipX = 0.5;
+  const shoulderX = hipX - lean; // positive lean = shoulders behind hips
+  return {
+    timestamp: timestampMs,
+    frameIndex,
+    confidence: 0.9,
+    keypoints: {
+      nose: kp(shoulderX - 0.05, shoulderY - 0.15),
+      left_shoulder: kp(shoulderX - 0.02, shoulderY),
+      right_shoulder: kp(shoulderX + 0.02, shoulderY, 0.6),
+      left_hip: kp(hipX - 0.02, hipY),
+      right_hip: kp(hipX + 0.02, hipY, 0.7),
+      left_knee: kp(hipX - 0.02, hipY + 0.17),
+      right_knee: kp(hipX + 0.02, hipY + 0.17, 0.7),
+      left_ankle: kp(hipX, hipY + 0.32),
+      right_ankle: kp(hipX, hipY + 0.32, 0.7),
+      // Wrists centered at ankle X so bar drift reads near zero
+      left_wrist: kp(hipX, wristY),
+      right_wrist: kp(hipX, wristY, 0.7),
+      left_elbow: kp(hipX, (shoulderY + wristY) / 2),
+      right_elbow: kp(hipX + 0.02, (shoulderY + wristY) / 2, 0.6),
+      // Facing right: foot_index.x > heel.x
+      left_heel: kp(hipX - 0.05, hipY + 0.34),
+      right_heel: kp(hipX + 0.05, hipY + 0.34, 0.7),
+      left_foot_index: kp(hipX + 0.05, hipY + 0.36),
+      right_foot_index: kp(hipX + 0.08, hipY + 0.36, 0.7),
+      left_ear: kp(shoulderX - 0.04, shoulderY - 0.12, 0.8),
+      right_ear: kp(shoulderX + 0.04, shoulderY - 0.12, 0.3),
+    },
+  };
+}
+
+function generateDeadliftRep(startIndex: number, startTs: number): PoseFrame[] {
+  const frames: PoseFrame[] = [];
+  const total = FRAMES_PER_REP;
+  // Phase 1: setup hinge (bar to floor) — wristY rises from 0.60 to 0.85
+  // Phase 2: pull (bar rises) — wristY falls from 0.85 to 0.55 (lockout)
+  // Phase 3: lower (bar back to floor) — wristY rises from 0.55 to 0.85
+  const setupEnd = Math.floor(total * 0.25);
+  const lockoutEnd = Math.floor(total * 0.6);
+
+  for (let i = 0; i < total; i++) {
+    const ts = startTs + i * MS_PER_FRAME;
+    let shoulderY: number, hipY: number, wristY: number;
+    if (i < setupEnd) {
+      const t = i / setupEnd;
+      wristY = lerp(0.60, 0.85, t);
+      shoulderY = lerp(0.35, 0.48, t);
+      hipY = lerp(0.55, 0.62, t);
+    } else if (i < lockoutEnd) {
+      const t = (i - setupEnd) / (lockoutEnd - setupEnd);
+      wristY = lerp(0.85, 0.55, t);
+      shoulderY = lerp(0.48, 0.35, t);
+      hipY = lerp(0.62, 0.55, t);
+    } else {
+      const t = (i - lockoutEnd) / (total - lockoutEnd);
+      wristY = lerp(0.55, 0.85, t);
+      shoulderY = lerp(0.35, 0.48, t);
+      hipY = lerp(0.55, 0.62, t);
+    }
+    frames.push(buildDeadliftFrame(shoulderY, hipY, wristY, 0.01, ts, startIndex + i));
+  }
+  return frames;
+}
+
+/** Clean conventional deadlift — no hitch, no bar drift, no hyperextension. */
+export function generateGoodDeadliftVideo(): PoseFrame[] {
+  const pre = generateStandingFrames(20, 0);
+  const rep1 = generateDeadliftRep(20, pre.length * MS_PER_FRAME);
+  const between = generateStandingFrames(10, (pre.length + rep1.length) * MS_PER_FRAME);
+  const rep2 = generateDeadliftRep(
+    pre.length + rep1.length + between.length,
+    (pre.length + rep1.length + between.length) * MS_PER_FRAME,
+  );
+  return [...pre, ...rep1, ...between, ...rep2];
+}
+
+// ─── Bench press fixtures ─────────────────────────────────────────────────────
+
+/**
+ * Bench press frame: lifter is supine. Shoulder and hip share nearly the same Y
+ * (both resting on the bench), satisfying isSupine(). Wrist descends to chest
+ * and returns for the press signal.
+ */
+function buildBenchFrame(
+  wristY: number,
+  elbowAngleDeg: number, // ~180 at lockout, ~70 at chest
+  timestampMs: number,
+  frameIndex: number,
+): PoseFrame {
+  // Supine: shoulder and hip at same Y; body horizontal across the frame
+  const shoulderX = 0.45;
+  const shoulderY = 0.50;
+  const hipX = 0.65;
+  const hipY = 0.50;
+  const elbowY = shoulderY - 0.05;
+  const wristX = shoulderX - 0.02;
+
+  return {
+    timestamp: timestampMs,
+    frameIndex,
+    confidence: 0.9,
+    keypoints: {
+      nose: kp(shoulderX - 0.15, shoulderY),
+      left_shoulder: kp(shoulderX - 0.02, shoulderY),
+      right_shoulder: kp(shoulderX + 0.02, shoulderY, 0.6),
+      left_elbow: kp(wristX - 0.04, elbowY),
+      right_elbow: kp(wristX + 0.04, elbowY, 0.6),
+      left_wrist: kp(wristX - 0.02, wristY),
+      right_wrist: kp(wristX + 0.02, wristY, 0.6),
+      left_hip: kp(hipX - 0.02, hipY),
+      right_hip: kp(hipX + 0.02, hipY, 0.7),
+      left_knee: kp(hipX + 0.12, hipY + 0.05),
+      right_knee: kp(hipX + 0.12, hipY + 0.05, 0.7),
+      left_ankle: kp(hipX + 0.22, hipY + 0.08),
+      right_ankle: kp(hipX + 0.22, hipY + 0.08, 0.7),
+      left_heel: kp(hipX + 0.24, hipY + 0.09),
+      right_heel: kp(hipX + 0.24, hipY + 0.09, 0.7),
+      left_foot_index: kp(hipX + 0.20, hipY + 0.10),
+      right_foot_index: kp(hipX + 0.20, hipY + 0.10, 0.7),
+      left_ear: kp(shoulderX - 0.18, shoulderY - 0.02, 0.8),
+      right_ear: kp(shoulderX - 0.14, shoulderY + 0.02, 0.3),
+    },
+  };
+}
+
+function generateBenchRepFrames(startIndex: number, startTs: number, pauseMs: number): PoseFrame[] {
+  const frames: PoseFrame[] = [];
+  const total = FRAMES_PER_REP;
+  const descentEnd = Math.floor(total * 0.35);
+  const chestFrames = Math.max(1, Math.round(pauseMs / MS_PER_FRAME));
+  const ascentStart = descentEnd + chestFrames;
+
+  for (let i = 0; i < total + chestFrames; i++) {
+    const ts = startTs + i * MS_PER_FRAME;
+    let wristY: number;
+    if (i < descentEnd) {
+      wristY = lerp(0.42, 0.55, i / descentEnd);
+    } else if (i < ascentStart) {
+      wristY = 0.55;
+    } else {
+      const t = (i - ascentStart) / (total - descentEnd);
+      wristY = lerp(0.55, 0.42, Math.min(1, t));
+    }
+    frames.push(buildBenchFrame(wristY, i < ascentStart ? 80 : 160, ts, startIndex + i));
+  }
+  return frames;
+}
+
+/** Clean bench press with a solid pause (600ms). */
+export function generateGoodBenchVideo(): PoseFrame[] {
+  const pre = Array.from({ length: 20 }, (_, i) =>
+    buildBenchFrame(0.42, 175, i * MS_PER_FRAME, i)
+  );
+  const rep1 = generateBenchRepFrames(20, pre.length * MS_PER_FRAME, 600);
+  const between = Array.from({ length: 10 }, (_, i) =>
+    buildBenchFrame(0.42, 175, (pre.length + rep1.length + i) * MS_PER_FRAME, pre.length + rep1.length + i)
+  );
+  const rep2 = generateBenchRepFrames(
+    pre.length + rep1.length + between.length,
+    (pre.length + rep1.length + between.length) * MS_PER_FRAME,
+    600,
+  );
+  return [...pre, ...rep1, ...between, ...rep2];
+}
+
+/** Bench press with a bounce (no pause, <100ms at chest). */
+export function generateBounceBenchVideo(): PoseFrame[] {
+  const pre = Array.from({ length: 20 }, (_, i) =>
+    buildBenchFrame(0.42, 175, i * MS_PER_FRAME, i)
+  );
+  const rep1 = generateBenchRepFrames(20, pre.length * MS_PER_FRAME, 0);
+  return [...pre, ...rep1];
+}
+
+// ─── Romanian deadlift fixtures ───────────────────────────────────────────────
+
+/**
+ * RDL frame: lifter faces right. Hips hinge back and down while knees stay
+ * nearly constant (the defining feature of the RDL vs squat pattern).
+ */
+function buildRdlFrame(
+  hipY: number,
+  shoulderY: number,
+  shoulderXOffset: number, // forward offset from hipX; >0 = forward (facing right = +X)
+  timestampMs: number,
+  frameIndex: number,
+): PoseFrame {
+  const hipX = 0.5;
+  const kneeX = 0.5;
+  const kneeY = 0.72;
+  const ankleY = 0.88;
+  const shoulderX = hipX + shoulderXOffset;
+
+  return {
+    timestamp: timestampMs,
+    frameIndex,
+    confidence: 0.9,
+    keypoints: {
+      nose: kp(shoulderX + 0.04, shoulderY - 0.14),
+      left_shoulder: kp(shoulderX - 0.02, shoulderY - 0.02),
+      right_shoulder: kp(shoulderX + 0.02, shoulderY + 0.02, 0.6),
+      left_hip: kp(hipX - 0.02, hipY),
+      right_hip: kp(hipX + 0.02, hipY, 0.7),
+      left_knee: kp(kneeX - 0.02, kneeY),
+      right_knee: kp(kneeX + 0.02, kneeY, 0.7),
+      left_ankle: kp(kneeX - 0.02, ankleY),
+      right_ankle: kp(kneeX + 0.02, ankleY, 0.7),
+      left_wrist: kp(hipX - 0.02, hipY + 0.08),
+      right_wrist: kp(hipX + 0.02, hipY + 0.08, 0.7),
+      left_elbow: kp(hipX - 0.02, hipY - 0.04),
+      right_elbow: kp(hipX + 0.02, hipY - 0.04, 0.6),
+      left_heel: kp(kneeX - 0.05, ankleY + 0.01),
+      right_heel: kp(kneeX + 0.05, ankleY + 0.01, 0.7),
+      left_foot_index: kp(kneeX + 0.05, ankleY + 0.02),
+      right_foot_index: kp(kneeX + 0.08, ankleY + 0.02, 0.7),
+      left_ear: kp(shoulderX - 0.02, shoulderY - 0.10, 0.8),
+      right_ear: kp(shoulderX + 0.02, shoulderY - 0.10, 0.3),
+    },
+  };
+}
+
+function generateRdlRepFrames(startIndex: number, startTs: number): PoseFrame[] {
+  const frames: PoseFrame[] = [];
+  const total = FRAMES_PER_REP;
+  const hingeEnd = Math.floor(total * 0.45);
+  const bottomFrames = 3;
+  const returnStart = hingeEnd + bottomFrames;
+
+  for (let i = 0; i < total; i++) {
+    const ts = startTs + i * MS_PER_FRAME;
+    let hipY: number, shoulderY: number, shoulderXOffset: number;
+    if (i < hingeEnd) {
+      const t = i / hingeEnd;
+      hipY = lerp(0.55, 0.67, t);
+      shoulderY = lerp(0.35, 0.55, t);
+      // Torso tips forward (shoulders move ahead of hips in facing direction)
+      shoulderXOffset = lerp(0.02, 0.18, t);
+    } else if (i < returnStart) {
+      hipY = 0.67;
+      shoulderY = 0.55;
+      shoulderXOffset = 0.18;
+    } else {
+      const t = (i - returnStart) / (total - returnStart);
+      hipY = lerp(0.67, 0.55, t);
+      shoulderY = lerp(0.55, 0.35, t);
+      // Shoulders return to slightly forward of hips at lockout (no backward lean)
+      shoulderXOffset = lerp(0.18, 0.02, t);
+    }
+    frames.push(buildRdlFrame(hipY, shoulderY, shoulderXOffset, ts, startIndex + i));
+  }
+  return frames;
+}
+
+/** Clean RDL — constant knees, bar close to legs, no hyperextension. */
+export function generateGoodRdlVideo(): PoseFrame[] {
+  const pre = Array.from({ length: 20 }, (_, i) =>
+    buildRdlFrame(0.55, 0.35, 0.02, i * MS_PER_FRAME, i)
+  );
+  const rep1 = generateRdlRepFrames(20, pre.length * MS_PER_FRAME);
+  const between = Array.from({ length: 10 }, (_, i) =>
+    buildRdlFrame(0.55, 0.35, 0.02, (pre.length + rep1.length + i) * MS_PER_FRAME, pre.length + rep1.length + i)
+  );
+  const rep2 = generateRdlRepFrames(
+    pre.length + rep1.length + between.length,
+    (pre.length + rep1.length + between.length) * MS_PER_FRAME,
+  );
+  return [...pre, ...rep1, ...between, ...rep2];
 }

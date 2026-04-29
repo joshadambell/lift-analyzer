@@ -17,15 +17,9 @@ import {
   mean,
 } from "../../core/geometry";
 import { getFault } from "../../knowledge";
+import { type CueSet, unknownResult, finalize } from "../../core/ruleHelpers";
 
 // ─── KB-sourced cue builders ──────────────────────────────────────────────────
-
-interface CueSet {
-  passed: string;
-  borderline: string;
-  failed: string;
-  unknown?: string;
-}
 
 /** Build a cue triple from a KB fault entry. */
 function cuesFromFault(faultId: string, passedCue: string, borderlineSuffix?: string): CueSet {
@@ -399,27 +393,6 @@ export function checkButtWink(
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function unknownResult(ruleId: string, ruleName: string, cue: string): RuleResult {
-  return { ruleId, ruleName, verdict: "unknown", cue, confidence: 0 };
-}
-
-function finalize(
-  ruleId: string,
-  ruleName: string,
-  verdict: RuleVerdict,
-  cues: CueSet,
-  value: number,
-  threshold: number,
-  confidence: number,
-  frameTimestamp?: number
-): RuleResult {
-  const cue =
-    verdict === "passed" ? cues.passed
-    : verdict === "borderline" ? cues.borderline
-    : cues.failed;
-  return { ruleId, ruleName, verdict, value, threshold, cue, confidence, frameTimestamp };
-}
 
 /** Compute bar path drift as a percentage of torso length (used in RepMetrics). */
 export function computeBarPathDriftPercent(

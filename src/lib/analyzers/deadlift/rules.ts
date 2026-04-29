@@ -18,20 +18,9 @@ import {
   mean,
   facingSign,
 } from "../../core/geometry";
-import { getFault } from "../../knowledge";
+import { type CueSet, unknownResult, finalize, makeCuesFromFault } from "../../core/ruleHelpers";
 
-interface CueSet { passed: string; borderline: string; failed: string; }
-
-function cuesFromFault(faultId: string, passedCue: string, borderlineCue?: string): CueSet {
-  const f = getFault("deadlift", faultId);
-  if (!f) return { passed: passedCue, borderline: passedCue, failed: "Form fault detected." };
-  const corrections = f.correction.map((c) => c.replace(/_/g, " ")).join("; ");
-  return {
-    passed: passedCue,
-    borderline: borderlineCue ?? `Borderline ${f.fault.toLowerCase()}.`,
-    failed: `${f.description}. Fix: ${corrections}.`,
-  };
-}
+const cuesFromFault = makeCuesFromFault("deadlift");
 
 export const DEADLIFT_RULE_CONFIGS = {
   hipsShoot: {
@@ -117,12 +106,19 @@ export function checkBarDrift(
   const cfg = DEADLIFT_RULE_CONFIGS.barDrift;
   const repFrames = frames.slice(bounds.startFrame, bounds.bottomFrame + 1);
   // Wrist X distance from ankle X: bar should track near the leg line.
+  // Use ankle midpoint when both are visible — this handles sumo stance where
+  // the dominant ankle is far from the bar path center.
   const distances = repFrames.map((f) => {
     const wrist = dominantSide(f, "left_wrist", "right_wrist");
-    const ankle = dominantSide(f, "left_ankle", "right_ankle");
-    if (!wrist || !ankle) return null;
-    if (wrist.visibility < 0.5 || ankle.visibility < 0.5) return null;
-    return Math.abs(wrist.x - ankle.x);
+    if (!wrist || wrist.visibility < 0.5) return null;
+    const la = getKp(f, "left_ankle");
+    const ra = getKp(f, "right_ankle");
+    const ankleX =
+      la && ra && la.visibility > 0.4 && ra.visibility > 0.4
+        ? midpoint(la, ra).x
+        : dominantSide(f, "left_ankle", "right_ankle")?.x ?? null;
+    if (ankleX === null) return null;
+    return Math.abs(wrist.x - ankleX);
   }).filter((v): v is number => v !== null);
 
   if (distances.length < 4 || torsoLen === 0) return unknown(cfg.id, cfg.name, cfg.cues.passed);
@@ -207,17 +203,7 @@ export function checkHitching(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function unknown(ruleId: string, ruleName: string, cue: string): RuleResult {
-  return { ruleId, ruleName, verdict: "unknown", cue, confidence: 0 };
-}
-
-function finalize(
-  ruleId: string, ruleName: string, verdict: RuleVerdict, cues: CueSet,
-  value: number, threshold: number, confidence: number
-): RuleResult {
-  const cue = verdict === "passed" ? cues.passed : verdict === "borderline" ? cues.borderline : cues.failed;
-  return { ruleId, ruleName, verdict, value, threshold, cue, confidence };
-}
+const unknown = unknownResult;
 
 /** Wrist X drift over the full rep (returned in RepMetrics.barPathDriftPercent) */
 export function computeBarPathDriftPercent(
