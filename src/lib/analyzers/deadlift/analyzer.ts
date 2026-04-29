@@ -6,6 +6,7 @@ import { estimateSideViewConfidence, torsoLength } from "../../core/geometry";
 import {
   estimateBottomDwell, buildTopFixes, findMainIssue,
 } from "../../core/analysisCommon";
+import { computeScore } from "../../core/scoring";
 import {
   checkHipsShoot, checkBarDrift, checkHyperextension, checkHitching,
   computeBarPathDriftPercent,
@@ -110,6 +111,7 @@ export class DeadliftAnalyzer implements LiftAnalyzer {
       overallVerdict,
       topFixes: buildTopFixes(reps, RULE_PRIORITY),
       videoValidation: validation,
+      score: computeScore(reps, RULE_PRIORITY),
     };
   }
 }

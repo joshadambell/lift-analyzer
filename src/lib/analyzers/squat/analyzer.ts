@@ -17,6 +17,7 @@ import {
   findMainIssue,
   countPassed,
 } from "../../core/analysisCommon";
+import { computeScore } from "../../core/scoring";
 import {
   checkDepth,
   checkKneeTravel,
@@ -143,6 +144,7 @@ export class SquatAnalyzer implements LiftAnalyzer {
       overallVerdict,
       topFixes: buildTopFixes(reps, RULE_PRIORITY),
       videoValidation: validation,
+      score: computeScore(reps, RULE_PRIORITY),
     };
   }
 }

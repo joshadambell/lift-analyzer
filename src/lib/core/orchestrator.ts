@@ -36,6 +36,7 @@ export async function runAnalysis(
       overallVerdict: validation.rejectionReason ?? "Analysis failed",
       topFixes: [],
       videoValidation: validation,
+      score: { score: 0, grade: "F" as const, repScores: [] },
     };
   }
 
@@ -48,6 +49,7 @@ export async function runAnalysis(
       overallVerdict: "No reps detected. Ensure the video shows complete reps with the lifter clearly in frame.",
       topFixes: [],
       videoValidation: { ...validation, rejectionReason: "No reps detected" },
+      score: { score: 0, grade: "F" as const, repScores: [] },
     };
   }
 

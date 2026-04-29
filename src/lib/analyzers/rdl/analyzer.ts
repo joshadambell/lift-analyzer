@@ -4,6 +4,7 @@ import type {
 import { segmentReps, type RepBounds } from "../../core/repSegmenter";
 import { estimateSideViewConfidence, torsoLength } from "../../core/geometry";
 import { estimateBottomDwell, buildTopFixes, findMainIssue } from "../../core/analysisCommon";
+import { computeScore } from "../../core/scoring";
 import {
   checkSquattingRDL, checkBarDrift, checkHyperextension, computeBarPathDriftPercent,
 } from "./rules";
@@ -97,6 +98,7 @@ export class RDLAnalyzer implements LiftAnalyzer {
       overallVerdict,
       topFixes: buildTopFixes(reps, RULE_PRIORITY),
       videoValidation: validation,
+      score: computeScore(reps, RULE_PRIORITY),
     };
   }
 }

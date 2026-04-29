@@ -82,6 +82,7 @@ export interface FormAnalysis {
   overallVerdict: string;          // geometric summary sentence
   topFixes: TopFix[];
   videoValidation: VideoValidation;
+  score: import("./scoring").LiftScore;
   narrative?: string;              // LLM-generated coaching (may vary per run)
 }
 

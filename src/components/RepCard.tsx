@@ -5,6 +5,7 @@ import type { RepMetrics, RuleResult, RuleVerdict } from "@/lib/core/types";
 
 interface Props {
   rep: RepMetrics;
+  repScore?: number;
 }
 
 const VERDICT_COLOR: Record<RuleVerdict, string> = {
@@ -40,7 +41,7 @@ function RuleRow({ rule }: { rule: RuleResult }) {
   );
 }
 
-export function RepCard({ rep }: Props) {
+export function RepCard({ rep, repScore }: Props) {
   const [showRaw, setShowRaw] = useState(false);
   const depthRule = rep.ruleResults.find((r) => r.ruleId === "depth");
   const worstIssue = rep.ruleResults
@@ -65,11 +66,16 @@ export function RepCard({ rep }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-bold text-white">Rep {rep.repNumber}</h3>
-          {depthRule && (
-            <span className={`text-sm font-mono px-3 py-1 rounded-full ${VERDICT_BADGE[depthRule.verdict]}`}>
-              Depth: {depthRule.verdict}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {repScore !== undefined && (
+              <span className="text-sm font-mono text-zinc-400">{repScore}/100</span>
+            )}
+            {depthRule && (
+              <span className={`text-sm font-mono px-3 py-1 rounded-full ${VERDICT_BADGE[depthRule.verdict]}`}>
+                Depth: {depthRule.verdict}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Timing row */}

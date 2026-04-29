@@ -4,6 +4,7 @@ import type {
 import { segmentReps, wristYSignal, type RepBounds } from "../../core/repSegmenter";
 import { torsoLength, getKp, midpoint } from "../../core/geometry";
 import { estimateBottomDwell, buildTopFixes, findMainIssue } from "../../core/analysisCommon";
+import { computeScore } from "../../core/scoring";
 import {
   checkPause, checkLockout, checkButtLift, checkBarPath, computeBarPathDriftPercent,
 } from "./rules";
@@ -108,6 +109,7 @@ export class BenchPressAnalyzer implements LiftAnalyzer {
       overallVerdict,
       topFixes: buildTopFixes(reps, RULE_PRIORITY),
       videoValidation: validation,
+      score: computeScore(reps, RULE_PRIORITY),
     };
   }
 }
