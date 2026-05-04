@@ -76,6 +76,10 @@ export async function runAnalysis(
     });
   }
 
+  // Frames are no longer needed — drop the reference so GC can reclaim the
+  // ~180 PoseFrame objects (each with 33 keypoints) before the narrative fetch.
+  frames.length = 0;
+
   // Stage 5: Build analysis
   const analysis = analyzer.buildFormAnalysis(repMetrics, validation);
 

@@ -87,6 +87,13 @@ async function ensurePoseLandmarker() {
 // Minimal type for the VideoFrameCallbackMetadata parameter
 interface VideoFrameMetadata { mediaTime: number; }
 
+// iOS Safari: rvfc fires once then stalls when playbackRate != 1 — force seek path.
+// Android/mobile: reduced fps keeps per-frame inference from blocking the thread too long.
+function isMobileDevice(): boolean {
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
 export async function extractPosesFromVideo(
   videoFile: File,
   onProgress?: (pct: number) => void
@@ -104,11 +111,19 @@ export async function extractPosesFromVideo(
 
   const landmarker = await ensurePoseLandmarker();
   const frames: PoseFrame[] = [];
-  const FPS_SAMPLE = 15;
+  const mobile = isMobileDevice();
+  // Lower fps on mobile: reduces inference calls from ~180 to ~72 for a 12s video.
+  // Rep segmentation and form rules work fine at 6fps; reps are seconds long.
+  const FPS_SAMPLE = mobile ? 6 : 15;
   const SAMPLE_INTERVAL = 1 / FPS_SAMPLE;
   const duration = video.duration;
 
-  const useRvfc = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
+  // Skip rvfc on iOS: playbackRate != 1 causes rvfc to stall after the first
+  // callback on iOS Safari. Also skip on any mobile where blocking inference
+  // would prevent the browser from delivering subsequent callbacks.
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const useRvfc = !isIOS && "requestVideoFrameCallback" in HTMLVideoElement.prototype;
 
   if (useRvfc) {
     // Fast path: decode frames in playback order, no per-frame seek overhead.
@@ -122,7 +137,18 @@ export async function extractPosesFromVideo(
     let frameIndex = 0;
 
     await new Promise<void>((resolve, reject) => {
+      // Stall guard: if no rvfc callback arrives for 2s the video has ended
+      // (or stalled). Detached blob-URL videos don't reliably fire 'ended'
+      // at playbackRate != 1, so polling for silence is more robust.
+      let stallTimer: ReturnType<typeof setTimeout>;
+      const done = () => { clearTimeout(stallTimer); resolve(); };
+      const resetStall = () => {
+        clearTimeout(stallTimer);
+        stallTimer = setTimeout(done, 2000);
+      };
+
       const onFrame = (_now: DOMHighResTimeStamp, meta: VideoFrameMetadata) => {
+        resetStall();
         const mediaTime = meta.mediaTime;
 
         if (mediaTime - lastSampledTime >= SAMPLE_INTERVAL) {
@@ -137,10 +163,11 @@ export async function extractPosesFromVideo(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (video as any).requestVideoFrameCallback(onFrame);
         } else {
-          resolve();
+          done();
         }
       };
 
+      resetStall(); // arm the initial stall timer
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (video as any).requestVideoFrameCallback(onFrame);
       video.play().catch(reject);
@@ -148,7 +175,9 @@ export async function extractPosesFromVideo(
 
     video.pause();
   } else {
-    // Fallback: seek to each sample point (slower but universally supported).
+    // Seek path: universally supported. On mobile, inference blocks the main
+    // thread per frame, so yield via setTimeout between seeks to keep the UI
+    // responsive and prevent WKWebView from throttling the JS task.
     let frameIndex = 0;
     let currentTime = 0;
     const step = SAMPLE_INTERVAL;
@@ -163,6 +192,9 @@ export async function extractPosesFromVideo(
       appendFrame(result, timestampMs, frameIndex++, frames);
       currentTime += step;
       onProgress?.(Math.min(99, (currentTime / duration) * 100));
+      // Yield to the browser between frames so progress updates repaint and
+      // iOS WKWebView doesn't kill the long-running synchronous task.
+      await new Promise<void>((r) => setTimeout(r, 0));
     }
   }
 
@@ -225,5 +257,8 @@ export async function extractFrameBitmap(
 
   const bitmap = await createImageBitmap(video);
   URL.revokeObjectURL(url);
+  // Clear src so the browser drops its decoded frame buffer immediately.
+  video.src = "";
+  video.load();
   return bitmap;
 }

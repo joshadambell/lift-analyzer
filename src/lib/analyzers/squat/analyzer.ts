@@ -82,7 +82,7 @@ export class SquatAnalyzer implements LiftAnalyzer {
   }
 
   segmentReps(frames: PoseFrame[]): RepBounds[] {
-    return segmentReps(frames);
+    return segmentReps(frames, { minDepthThreshold: 0.06 });
   }
 
   analyzeRep(frames: PoseFrame[], bounds: RepBounds, repNumber: number): RepMetrics {

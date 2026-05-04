@@ -50,7 +50,9 @@ export class DeadliftAnalyzer implements LiftAnalyzer {
   }
 
   segmentReps(frames: PoseFrame[]): RepBounds[] {
-    return segmentReps(frames, { signal: invertedWristYSignal, minDepthThreshold: 0.06 });
+    // minDepthThreshold 0.10 filters setup noise; returnDepthFraction 0.8
+    // prevents the post-set "stand up" motion from registering as a false rep.
+    return segmentReps(frames, { signal: invertedWristYSignal, minDepthThreshold: 0.10, minRepFrames: 20, returnDepthFraction: 0.8 });
   }
 
   analyzeRep(frames: PoseFrame[], bounds: RepBounds, repNumber: number): RepMetrics {

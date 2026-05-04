@@ -26,6 +26,12 @@ export interface SegmentOptions {
   minRepFrames?: number;
   /** Override the default hip-midpoint signal extractor */
   signal?: SignalExtractor;
+  /**
+   * Fraction of minDepthThreshold the signal must have returned from its peak
+   * before a rep counts. Higher = stricter. Default 0.25 (permissive).
+   * Set higher for lifts where post-set stand-up creates false reps (deadlift).
+   */
+  returnDepthFraction?: number;
 }
 
 /** Missing-frame sentinel — any extractor that can't read its keypoint returns NaN. */
@@ -78,7 +84,9 @@ export function segmentReps(
     minDepthThreshold = 0.08,
     minRepFrames = 15,
     signal = hipYSignal,
+    returnDepthFraction = 0.25,
   } = options;
+  const minReturnDepth = minDepthThreshold * returnDepthFraction;
 
   if (frames.length < minRepFrames) return [];
 
@@ -133,7 +141,7 @@ export function segmentReps(
           // (at lockout) and then barely moves before the FSM resets.
           const returnDepth = smoothed[bottomFrame] - smoothed[repEnd];
 
-          if (totalFrames >= minRepFrames && depthChange >= minDepthThreshold && returnDepth >= minDepthThreshold * 0.5) {
+          if (totalFrames >= minRepFrames && depthChange >= minDepthThreshold && returnDepth >= minReturnDepth) {
             reps.push({ startFrame: repStart, bottomFrame, endFrame: repEnd });
           }
 
@@ -151,7 +159,7 @@ export function segmentReps(
     const totalFrames = repEnd - repStart;
     const depthChange = smoothed[bottomFrame] - smoothed[repStart];
     const returnDepth = smoothed[bottomFrame] - smoothed[repEnd];
-    if (totalFrames >= minRepFrames && depthChange >= minDepthThreshold && returnDepth >= minDepthThreshold * 0.5) {
+    if (totalFrames >= minRepFrames && depthChange >= minDepthThreshold && returnDepth >= minReturnDepth) {
       reps.push({ startFrame: repStart, bottomFrame, endFrame: repEnd });
     }
   }

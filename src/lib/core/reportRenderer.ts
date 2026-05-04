@@ -32,48 +32,45 @@ const COLORS = {
   depthFail: "#ff4444",
 };
 
+// Cap rendered key frames to avoid holding multi-MB GPU textures per rep.
+// 1280px is plenty for the report cards and keeps peak memory low.
+const MAX_KEYFRAME_WIDTH = 1280;
+
 export async function renderRepKeyFrame(
   videoFile: File,
   rep: RepMetrics,
   allFrames: PoseFrame[],
   repFrames: PoseFrame[]
 ): Promise<string> {
-  // Extract the bottom-position frame from video
   const { extractFrameBitmap } = await import("./poseExtractor");
   const bitmap = await extractFrameBitmap(videoFile, rep.bottomTimestamp);
 
+  const scale = Math.min(1, MAX_KEYFRAME_WIDTH / bitmap.width);
   const canvas = document.createElement("canvas");
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
   const ctx = canvas.getContext("2d")!;
 
-  // Draw video frame
-  ctx.drawImage(bitmap, 0, 0);
-
-  // Semi-transparent overlay for readability
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "rgba(0,0,0,0.25)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Re-draw video frame with overlay
-  ctx.drawImage(bitmap, 0, 0);
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
 
   const bottomPoseFrame = allFrames[rep.bottomFrame];
-  if (!bottomPoseFrame) return canvas.toDataURL();
+  if (bottomPoseFrame) {
+    drawBarPath(ctx, repFrames, canvas.width, canvas.height);
+    drawSkeleton(ctx, bottomPoseFrame, canvas.width, canvas.height);
+    drawDepthIndicator(ctx, bottomPoseFrame, rep, canvas.width, canvas.height);
+    drawRepLabel(ctx, rep, canvas.width, canvas.height);
+  }
 
-  // Draw bar path across the full rep
-  drawBarPath(ctx, repFrames, canvas.width, canvas.height);
-
-  // Draw skeleton at bottom position
-  drawSkeleton(ctx, bottomPoseFrame, canvas.width, canvas.height);
-
-  // Draw depth indicator: hip vs knee horizontal line
-  drawDepthIndicator(ctx, bottomPoseFrame, rep, canvas.width, canvas.height);
-
-  // Draw rep number and depth verdict
-  drawRepLabel(ctx, rep, canvas.width, canvas.height);
-
-  bitmap.close();
-  return canvas.toDataURL("image/jpeg", 0.85);
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+  // Zero out dimensions to immediately release the GPU texture rather than
+  // waiting for GC — critical on mobile where the browser won't GC between reps.
+  canvas.width = 0;
+  canvas.height = 0;
+  return dataUrl;
 }
 
 function drawSkeleton(

@@ -82,7 +82,7 @@ export function RepCard({ rep, repScore }: Props) {
         <div className="flex gap-4 text-xs text-zinc-400 mb-4 font-mono">
           <span>↓ {(rep.descentDurationMs / 1000).toFixed(2)}s descent</span>
           <span>↑ {(rep.ascentDurationMs / 1000).toFixed(2)}s ascent</span>
-          <span>⏸ {rep.bottomDwellMs}ms dwell</span>
+          <span>⏸ {Math.round(rep.bottomDwellMs)}ms dwell</span>
           <span>→ {rep.barPathDriftPercent.toFixed(1)}% bar drift</span>
         </div>
 
