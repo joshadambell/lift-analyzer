@@ -65,7 +65,8 @@ export async function runAnalysis(
     const rep = repMetrics[i];
     const repFrames = frames.slice(repBounds[i].startFrame, repBounds[i].endFrame + 1);
     try {
-      rep.keyFrameDataUrl = await renderRepKeyFrame(videoFile, rep, frames, repFrames);
+      const rendered = await renderRepKeyFrame(videoFile, rep, frames, repFrames);
+      rep.keyFrameDataUrl = rendered.dataUrl;
     } catch {
       // Non-fatal: continue without key frame
     }

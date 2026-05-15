@@ -1,12 +1,7 @@
 "use client";
 
-/**
- * Canvas-based skeleton and bar-path renderer.
- * Draws annotated key frames for the report.
- */
-
 import type { PoseFrame, RepMetrics } from "./types";
-import { getKp, midpoint, smoothMovingAverage } from "./geometry";
+import { getKp, midpoint, smoothMovingAverage, distance, dominantSide } from "./geometry";
 
 const SKELETON_CONNECTIONS: [string, string][] = [
   ["left_shoulder", "right_shoulder"],
@@ -26,14 +21,11 @@ const COLORS = {
   barPath: "#ff6b35",
   barPathCurrent: "#ffdc00",
   hipKneeLine: "#00d4ff",
-  text: "#ffffff",
-  textShadow: "#000000",
   depthPass: "#00ff88",
   depthFail: "#ff4444",
 };
 
 // Cap rendered key frames to avoid holding multi-MB GPU textures per rep.
-// 1280px is plenty for the report cards and keeps peak memory low.
 const MAX_KEYFRAME_WIDTH = 1280;
 
 export async function renderRepKeyFrame(
@@ -41,7 +33,7 @@ export async function renderRepKeyFrame(
   rep: RepMetrics,
   allFrames: PoseFrame[],
   repFrames: PoseFrame[]
-): Promise<string> {
+): Promise<{ dataUrl: string }> {
   const { extractFrameBitmap } = await import("./poseExtractor");
   const bitmap = await extractFrameBitmap(videoFile, rep.bottomTimestamp);
 
@@ -66,24 +58,16 @@ export async function renderRepKeyFrame(
   }
 
   const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-  // Zero out dimensions to immediately release the GPU texture rather than
-  // waiting for GC — critical on mobile where the browser won't GC between reps.
   canvas.width = 0;
   canvas.height = 0;
-  return dataUrl;
+  return { dataUrl };
 }
 
-function drawSkeleton(
-  ctx: CanvasRenderingContext2D,
-  frame: PoseFrame,
-  w: number,
-  h: number
-) {
+function drawSkeleton(ctx: CanvasRenderingContext2D, frame: PoseFrame, w: number, h: number) {
   ctx.lineWidth = Math.max(2, w / 300);
-
-  // Draw connections
   ctx.strokeStyle = COLORS.skeleton;
   ctx.globalAlpha = 0.85;
+
   for (const [a, b] of SKELETON_CONNECTIONS) {
     const kpA = getKp(frame, a);
     const kpB = getKp(frame, b);
@@ -95,9 +79,8 @@ function drawSkeleton(
     ctx.stroke();
   }
 
-  // Draw joints
   const radius = Math.max(4, w / 200);
-  for (const [name, kp] of Object.entries(frame.keypoints)) {
+  for (const [, kp] of Object.entries(frame.keypoints)) {
     if (kp.visibility < 0.4) continue;
     ctx.globalAlpha = Math.min(1, kp.visibility);
     ctx.fillStyle = COLORS.joint;
@@ -109,12 +92,7 @@ function drawSkeleton(
   ctx.globalAlpha = 1;
 }
 
-function drawBarPath(
-  ctx: CanvasRenderingContext2D,
-  frames: PoseFrame[],
-  w: number,
-  h: number
-) {
+function drawBarPath(ctx: CanvasRenderingContext2D, frames: PoseFrame[], w: number, h: number) {
   const points = frames.map((f) => {
     const ls = getKp(f, "left_shoulder");
     const rs = getKp(f, "right_shoulder");
@@ -142,12 +120,9 @@ function drawBarPath(
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Highlight current (bottom) position
   ctx.fillStyle = COLORS.barPathCurrent;
   ctx.beginPath();
-  const lastX = smoothedX.at(-1)! * w;
-  const lastY = smoothedY.at(-1)! * h;
-  ctx.arc(lastX, lastY, Math.max(5, w / 120), 0, Math.PI * 2);
+  ctx.arc(smoothedX.at(-1)! * w, smoothedY.at(-1)! * h, Math.max(5, w / 120), 0, Math.PI * 2);
   ctx.fill();
 
   ctx.globalAlpha = 1;
@@ -163,9 +138,13 @@ function drawDepthIndicator(
   const depthResult = rep.ruleResults.find((r) => r.ruleId === "depth");
   if (!depthResult) return;
 
-  const hip = frame.keypoints["left_hip"] ?? frame.keypoints["right_hip"];
-  const knee = frame.keypoints["left_knee"] ?? frame.keypoints["right_knee"];
+  const hip = dominantSide(frame, "left_hip", "right_hip");
+  const knee = dominantSide(frame, "left_knee", "right_knee");
   if (!hip || !knee) return;
+
+  const ankle = dominantSide(frame, "left_ankle", "right_ankle");
+  const shinLen = ankle ? distance(knee, ankle) : distance(hip, knee) * 0.8;
+  const patellaTopY = knee.y - 0.12 * shinLen;
 
   const color = depthResult.verdict === "passed" ? COLORS.depthPass : COLORS.depthFail;
 
@@ -174,29 +153,24 @@ function drawDepthIndicator(
   ctx.lineWidth = 2;
   ctx.setLineDash([8, 4]);
 
-  // Draw horizontal line at hip level
+  // Hip line: top of thigh at hip joint (greater trochanter ≈ correct height)
   ctx.beginPath();
   ctx.moveTo(0, hip.y * h);
   ctx.lineTo(w, hip.y * h);
   ctx.stroke();
 
-  // Draw horizontal line at knee level
+  // Knee line: estimated patella top (12% of shin above joint center)
   ctx.strokeStyle = COLORS.hipKneeLine;
   ctx.beginPath();
-  ctx.moveTo(0, knee.y * h);
-  ctx.lineTo(w, knee.y * h);
+  ctx.moveTo(0, patellaTopY * h);
+  ctx.lineTo(w, patellaTopY * h);
   ctx.stroke();
 
   ctx.setLineDash([]);
   ctx.globalAlpha = 1;
 }
 
-function drawRepLabel(
-  ctx: CanvasRenderingContext2D,
-  rep: RepMetrics,
-  w: number,
-  h: number
-) {
+function drawRepLabel(ctx: CanvasRenderingContext2D, rep: RepMetrics, w: number, h: number) {
   const depthResult = rep.ruleResults.find((r) => r.ruleId === "depth");
   const verdict = depthResult?.verdict ?? "unknown";
   const color =
@@ -212,4 +186,6 @@ function drawRepLabel(
   ctx.fillRect(8, 8, ctx.measureText(label).width + 16, fontSize + 12);
   ctx.fillStyle = color;
   ctx.fillText(label, 16, fontSize + 10);
+
+  void h; // suppress unused warning
 }

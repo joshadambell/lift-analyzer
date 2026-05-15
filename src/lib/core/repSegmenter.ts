@@ -32,6 +32,12 @@ export interface SegmentOptions {
    * Set higher for lifts where post-set stand-up creates false reps (deadlift).
    */
   returnDepthFraction?: number;
+  /**
+   * When true, discard any rep whose depth is below this fraction of the
+   * median rep depth. Filters unrack/re-rack motions that pass absolute
+   * thresholds but are shallower than the working set. Default: disabled.
+   */
+  adaptiveDepthFraction?: number;
 }
 
 /** Missing-frame sentinel — any extractor that can't read its keypoint returns NaN. */
@@ -85,6 +91,7 @@ export function segmentReps(
     minRepFrames = 15,
     signal = hipYSignal,
     returnDepthFraction = 0.25,
+    adaptiveDepthFraction,
   } = options;
   const minReturnDepth = minDepthThreshold * returnDepthFraction;
 
@@ -111,6 +118,7 @@ export function segmentReps(
         if (dy > 0.001) {
           state = "descending";
           repStart = i - 1;
+          bottomFrame = i - 1;
           bottomY = smoothed[i];
         }
         break;
@@ -136,13 +144,17 @@ export function segmentReps(
           const repEnd = i;
           const totalFrames = repEnd - repStart;
           const depthChange = smoothed[bottomFrame] - smoothed[repStart];
-          // Require the signal to have returned at least halfway from its peak.
-          // This rejects false "stand up after set" reps where the signal peaks
-          // (at lockout) and then barely moves before the FSM resets.
           const returnDepth = smoothed[bottomFrame] - smoothed[repEnd];
 
-          if (totalFrames >= minRepFrames && depthChange >= minDepthThreshold && returnDepth >= minReturnDepth) {
+          const okFrames = totalFrames >= minRepFrames;
+          const okDepth = depthChange >= minDepthThreshold;
+          const okReturn = returnDepth >= minReturnDepth;
+
+          if (okFrames && okDepth && okReturn) {
+            console.debug(`[repSegmenter] ✅ rep #${reps.length + 1} frames ${repStart}→${bottomFrame}→${repEnd} depth=${depthChange.toFixed(3)} return=${returnDepth.toFixed(3)} totalFrames=${totalFrames}`);
             reps.push({ startFrame: repStart, bottomFrame, endFrame: repEnd });
+          } else {
+            console.debug(`[repSegmenter] ❌ rejected candidate frames ${repStart}→${bottomFrame}→${repEnd} depth=${depthChange.toFixed(3)}(need ${minDepthThreshold}) return=${returnDepth.toFixed(3)}(need ${minReturnDepth.toFixed(3)}) frames=${totalFrames}(need ${minRepFrames}) okFrames=${okFrames} okDepth=${okDepth} okReturn=${okReturn}`);
           }
 
           state = "standing";
@@ -159,12 +171,34 @@ export function segmentReps(
     const totalFrames = repEnd - repStart;
     const depthChange = smoothed[bottomFrame] - smoothed[repStart];
     const returnDepth = smoothed[bottomFrame] - smoothed[repEnd];
-    if (totalFrames >= minRepFrames && depthChange >= minDepthThreshold && returnDepth >= minReturnDepth) {
+
+    const okFrames = totalFrames >= minRepFrames;
+    const okDepth = depthChange >= minDepthThreshold;
+    const okReturn = returnDepth >= minReturnDepth;
+
+    if (okFrames && okDepth && okReturn) {
+      console.debug(`[repSegmenter] ✅ rep #${reps.length + 1} (final) frames ${repStart}→${bottomFrame}→${repEnd} depth=${depthChange.toFixed(3)} return=${returnDepth.toFixed(3)} totalFrames=${totalFrames}`);
       reps.push({ startFrame: repStart, bottomFrame, endFrame: repEnd });
+    } else if (state === "ascending") {
+      console.debug(`[repSegmenter] ❌ rejected final candidate frames ${repStart}→${bottomFrame}→${repEnd} depth=${depthChange.toFixed(3)}(need ${minDepthThreshold}) return=${returnDepth.toFixed(3)}(need ${minReturnDepth.toFixed(3)}) frames=${totalFrames}(need ${minRepFrames}) okFrames=${okFrames} okDepth=${okDepth} okReturn=${okReturn}`);
     }
   }
 
-  return reps;
+  let filtered = reps;
+  if (adaptiveDepthFraction !== undefined && reps.length > 1) {
+    const depths = reps.map((r) => smoothed[r.bottomFrame] - smoothed[r.startFrame]);
+    const sorted = [...depths].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const cutoff = median * adaptiveDepthFraction;
+    filtered = reps.filter((r, i) => {
+      const keep = depths[i] >= cutoff;
+      if (!keep) console.debug(`[repSegmenter] 🚫 adaptive filter removed rep frames ${r.startFrame}→${r.bottomFrame}→${r.endFrame} depth=${depths[i].toFixed(3)} < cutoff=${cutoff.toFixed(3)} (${(adaptiveDepthFraction * 100).toFixed(0)}% of median ${median.toFixed(3)})`);
+      return keep;
+    });
+  }
+
+  console.debug(`[repSegmenter] summary: ${filtered.length} reps (${reps.length} before adaptive filter) from ${frames.length} frames. thresholds: minDepth=${minDepthThreshold} minReturnDepth=${minReturnDepth.toFixed(3)} minFrames=${minRepFrames} smoothing=${smoothingWindow}`);
+  return filtered;
 }
 
 function fillMissing(values: number[]): number[] {

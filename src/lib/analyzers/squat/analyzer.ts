@@ -82,7 +82,19 @@ export class SquatAnalyzer implements LiftAnalyzer {
   }
 
   segmentReps(frames: PoseFrame[]): RepBounds[] {
-    return segmentReps(frames, { minDepthThreshold: 0.06 });
+    const reps = segmentReps(frames, { minDepthThreshold: 0.06, adaptiveDepthFraction: 0.50 });
+    // Drop walkout: the step-back after unracking starts near frame 0 and has
+    // extreme ascent/descent asymmetry (lifter slowly returns to standing rather
+    // than squatting back up). Real squats are roughly symmetric (ratio < 3×).
+    if (reps.length > 1 && reps[0].startFrame < 50) {
+      const descent = reps[0].bottomFrame - reps[0].startFrame;
+      const ascent = reps[0].endFrame - reps[0].bottomFrame;
+      if (descent > 0 && ascent / descent > 4) {
+        console.debug(`[squatAnalyzer] 🚫 dropped walkout: frames ${reps[0].startFrame}→${reps[0].bottomFrame}→${reps[0].endFrame} asymmetry=${(ascent / descent).toFixed(1)}×`);
+        return reps.slice(1);
+      }
+    }
+    return reps;
   }
 
   analyzeRep(frames: PoseFrame[], bounds: RepBounds, repNumber: number): RepMetrics {

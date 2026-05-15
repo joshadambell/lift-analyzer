@@ -15,6 +15,7 @@ import {
   angleDeg,
   smoothMovingAverage,
   mean,
+  distance,
 } from "../../core/geometry";
 import { getFault } from "../../knowledge";
 import { type CueSet, unknownResult, finalize } from "../../core/ruleHelpers";
@@ -149,16 +150,25 @@ export function checkDepth(
     return unknownResult(cfg.id, cfg.name, cfg.cues.failed);
   }
 
+  const ankle = dominantSide(bottomFrame, "left_ankle", "right_ankle");
+  const shinLen = ankle ? distance(knee, ankle) : distance(hip, knee) * 0.8;
+
+  // IPF standard: top surface of thigh at hip joint must be below the top of
+  // the kneecap. MediaPipe's hip landmark (greater trochanter) is at the right
+  // height for the hip reference. The knee landmark is the joint center, which
+  // sits below the patella top — adjust upward by ~12% of shin length.
+  const patellaTopY = knee.y - 0.12 * shinLen;
+
   const tolerance = torsoLen * cfg.toleranceFraction;
-  const hipBelowKneeBy = hip.y - knee.y;
+  const hipBelowPatellaTopBy = hip.y - patellaTopY;
   const conf = Math.min(hip.visibility, knee.visibility);
 
   let verdict: RuleVerdict;
-  if (hipBelowKneeBy > tolerance) verdict = "passed";
-  else if (hipBelowKneeBy > -tolerance) verdict = "borderline";
+  if (hipBelowPatellaTopBy > tolerance) verdict = "passed";
+  else if (hipBelowPatellaTopBy > -tolerance) verdict = "borderline";
   else verdict = "failed";
 
-  return finalize(cfg.id, cfg.name, verdict, cfg.cues, hipBelowKneeBy, tolerance, conf, bottomFrame.timestamp);
+  return finalize(cfg.id, cfg.name, verdict, cfg.cues, hipBelowPatellaTopBy, tolerance, conf, bottomFrame.timestamp);
 }
 
 export function checkKneeTravel(

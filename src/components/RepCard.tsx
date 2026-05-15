@@ -57,7 +57,7 @@ export function RepCard({ rep, repScore }: Props) {
           <img
             src={rep.keyFrameDataUrl}
             alt={`Rep ${rep.repNumber} bottom position`}
-            className="w-full object-cover max-h-64"
+            className="w-full h-auto block"
           />
         </div>
       )}

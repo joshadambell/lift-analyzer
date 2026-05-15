@@ -148,7 +148,6 @@ export async function extractPosesFromVideo(
       };
 
       const onFrame = (_now: DOMHighResTimeStamp, meta: VideoFrameMetadata) => {
-        resetStall();
         const mediaTime = meta.mediaTime;
 
         if (mediaTime - lastSampledTime >= SAMPLE_INTERVAL) {
@@ -162,6 +161,10 @@ export async function extractPosesFromVideo(
         if (mediaTime < duration - SAMPLE_INTERVAL * 0.5) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (video as any).requestVideoFrameCallback(onFrame);
+          // Reset stall guard AFTER inference and after requesting the next
+          // callback — this measures silence between callbacks, not the
+          // duration of inference itself (which can exceed the old 2s window).
+          resetStall();
         } else {
           done();
         }
